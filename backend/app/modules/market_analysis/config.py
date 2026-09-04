@@ -73,6 +73,39 @@ class MarketAnalysisSettings(BaseSettings):
         description="Maximum swing range as % of price to classify as ranging",
     )
 
+    # --- Liquidity Analysis ---
+    liquidity_equal_level_tolerance_pct: float = Field(
+        default=0.05,
+        description="Tolerance (%) for clustering swing highs/lows into equal highs/lows. "
+                    "Swings within this percentage of each other are grouped.",
+    )
+    liquidity_min_touches: int = Field(
+        default=2,
+        ge=1,
+        description="Minimum number of swings required to form an equal highs/lows pool",
+    )
+    liquidity_sweep_mode: str = Field(
+        default="wick",
+        description="Sweep detection mode: 'wick' for wick-based, 'close' for close-based",
+    )
+    liquidity_min_sweep_distance_pct: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Minimum distance beyond pool level (%) for a valid sweep (0 = any cross)",
+    )
+    liquidity_max_active_pools: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum number of active liquidity pools to retain",
+    )
+    liquidity_max_history_depth: int = Field(
+        default=50,
+        ge=5,
+        le=500,
+        description="Maximum number of candles to look back for sweep reaction classification",
+    )
+
 
 def get_market_analysis_settings() -> MarketAnalysisSettings:
     """Get validated market analysis settings (uncached for test isolation)."""

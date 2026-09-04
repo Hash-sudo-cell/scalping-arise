@@ -74,6 +74,47 @@ export interface RegimeResult {
   evidence: string[];
 }
 
+export interface LiquidityPool {
+  pool_id: string;
+  side: "buy_side" | "sell_side";
+  pool_type: "swing_high" | "swing_low" | "equal_highs" | "equal_lows";
+  price_level: number;
+  lower_bound: number;
+  upper_bound: number;
+  touch_count: number;
+  source_swings: number[];
+  status: "active" | "swept" | "invalidated";
+  strength: "low" | "medium" | "high";
+  timeframe: string;
+}
+
+export interface LiquiditySweep {
+  sweep_id: string;
+  pool_id: string;
+  side: "buy_side" | "sell_side";
+  pool_price_level: number;
+  sweep_timestamp: string;
+  sweep_mode: "wick" | "close";
+  sweep_price: number;
+  candle_close: number;
+  reaction: "rejection" | "acceptance" | "neutral" | "unavailable";
+}
+
+export interface LiquidityResult {
+  status: "available" | "unavailable";
+  reason: string;
+  active_pool_count: number;
+  swept_pool_count: number;
+  nearest_buy_side_pool: LiquidityPool | null;
+  nearest_sell_side_pool: LiquidityPool | null;
+  distance_to_buy_side: number | null;
+  distance_to_sell_side: number | null;
+  distance_to_buy_side_pct: number | null;
+  distance_to_sell_side_pct: number | null;
+  pool_count: number;
+  sweep_count: number;
+}
+
 export interface MarketAnalysisResponse {
   status: "available" | "unavailable";
   reason: string;
@@ -85,6 +126,7 @@ export interface MarketAnalysisResponse {
   zones?: ZonesResult;
   session?: string;
   regime?: RegimeResult;
+  liquidity?: LiquidityResult;
 }
 
 export interface AnalysisCapabilities {

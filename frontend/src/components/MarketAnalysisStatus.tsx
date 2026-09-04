@@ -245,6 +245,67 @@ export default function MarketAnalysisStatus() {
               ))}
             </>
           )}
+
+          {/* Liquidity */}
+          {analysis.liquidity && (
+            <>
+              <div className="ma-divider" />
+              <div className="ma-row">
+                <span className="ma-key">Liquidity</span>
+                <span className="ma-value" style={{
+                  color: analysis.liquidity.status === "available" ? "var(--color-accent)" : "var(--color-text-muted)"
+                }}>
+                  {analysis.liquidity.status === "available" ? "Available" : "Unavailable"}
+                </span>
+              </div>
+              {analysis.liquidity.status === "available" && (
+                <>
+                  <div className="ma-row">
+                    <span className="ma-key">Active Pools</span>
+                    <span className="ma-value">{analysis.liquidity.active_pool_count}</span>
+                  </div>
+                  <div className="ma-row">
+                    <span className="ma-key">Swept Pools</span>
+                    <span className="ma-value">{analysis.liquidity.swept_pool_count}</span>
+                  </div>
+                  <div className="ma-row">
+                    <span className="ma-key">Sweep Events</span>
+                    <span className="ma-value">{analysis.liquidity.sweep_count}</span>
+                  </div>
+                  {analysis.liquidity.distance_to_buy_side !== null && (
+                    <div className="ma-row">
+                      <span className="ma-key">Nearest Buy-Side</span>
+                      <span className="ma-value ma-bull">
+                        {analysis.liquidity.distance_to_buy_side.toFixed(2)} ({analysis.liquidity.distance_to_buy_side_pct?.toFixed(3)}%)
+                      </span>
+                    </div>
+                  )}
+                  {analysis.liquidity.distance_to_sell_side !== null && (
+                    <div className="ma-row">
+                      <span className="ma-key">Nearest Sell-Side</span>
+                      <span className="ma-value ma-bear">
+                        {analysis.liquidity.distance_to_sell_side.toFixed(2)} ({analysis.liquidity.distance_to_sell_side_pct?.toFixed(3)}%)
+                      </span>
+                    </div>
+                  )}
+                  {analysis.liquidity.nearest_buy_side_pool && (
+                    <div className="ma-evidence">
+                      <span className="ma-evidence-text">
+                        Buy-side: {analysis.liquidity.nearest_buy_side_pool.pool_type.replace("_", " ")} @ {analysis.liquidity.nearest_buy_side_pool.price_level.toFixed(2)} ({analysis.liquidity.nearest_buy_side_pool.strength})
+                      </span>
+                    </div>
+                  )}
+                  {analysis.liquidity.nearest_sell_side_pool && (
+                    <div className="ma-evidence">
+                      <span className="ma-evidence-text">
+                        Sell-side: {analysis.liquidity.nearest_sell_side_pool.pool_type.replace("_", " ")} @ {analysis.liquidity.nearest_sell_side_pool.price_level.toFixed(2)} ({analysis.liquidity.nearest_sell_side_pool.strength})
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
         </div>
       )}
 

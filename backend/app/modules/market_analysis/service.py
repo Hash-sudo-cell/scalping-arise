@@ -17,6 +17,7 @@ from typing import Optional
 
 from app.modules.market_analysis.bos_choch import detect_bos, detect_choch
 from app.modules.market_analysis.config import MarketAnalysisSettings, get_market_analysis_settings
+from app.modules.market_analysis.liquidity import analyze_liquidity
 from app.modules.market_analysis.models import (
     AnalysisContext,
     AnalysisResult,
@@ -172,6 +173,14 @@ class MarketAnalysisService:
             settings=self._settings,
         )
 
+        # Step 12: Liquidity analysis
+        liquidity_result = analyze_liquidity(
+            swings=swings,
+            candles=candles,
+            current_price=latest_price,
+            settings=self._settings,
+        )
+
         # Build structure result
         from app.modules.market_analysis.models import EventsResult, RegimeResult, StructureResult, ZonesResult, TrendResult as TrendResultModel, ZonesResult as ZonesResultModel
 
@@ -202,5 +211,6 @@ class MarketAnalysisService:
             zones=zones_result,
             session=session,
             regime=regime,
+            liquidity=liquidity_result,
             analysis_timestamp=analysis_ts,
         )

@@ -94,6 +94,58 @@ class AnalysisStatus(str, Enum):
 
 
 # ---------------------------------------------------------------------------
+# Liquidity Enums
+# ---------------------------------------------------------------------------
+
+class LiquiditySide(str, Enum):
+    """Side of the liquidity pool relative to price."""
+
+    BUY_SIDE = "buy_side"    # Liquidity resting above highs
+    SELL_SIDE = "sell_side"  # Liquidity resting below lows
+
+
+class LiquidityPoolType(str, Enum):
+    """Classification of liquidity pool origin."""
+
+    SWING_HIGH = "swing_high"
+    SWING_LOW = "swing_low"
+    EQUAL_HIGHS = "equal_highs"
+    EQUAL_LOWS = "equal_lows"
+
+
+class LiquidityPoolStatus(str, Enum):
+    """Lifecycle state of a liquidity pool."""
+
+    ACTIVE = "active"
+    SWEPT = "swept"
+    INVALIDATED = "invalidated"
+
+
+class LiquidityStrength(str, Enum):
+    """Descriptive strength of a liquidity pool."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class LiquiditySweepMode(str, Enum):
+    """How sweep detection is evaluated against price."""
+
+    WICK = "wick"    # Candle wick crosses level
+    CLOSE = "close"  # Candle close crosses level
+
+
+class PostSweepReaction(str, Enum):
+    """Descriptive classification of price behavior after a sweep."""
+
+    REJECTION = "rejection"
+    ACCEPTANCE = "acceptance"
+    NEUTRAL = "neutral"
+    UNAVAILABLE = "unavailable"
+
+
+# ---------------------------------------------------------------------------
 # Swing Point
 # ---------------------------------------------------------------------------
 
@@ -262,6 +314,89 @@ class RegimeResult(BaseModel):
     )
 
 
+# ---------------------------------------------------------------------------
+# Liquidity Models
+# ---------------------------------------------------------------------------
+
+class LiquidityPool(BaseModel):
+    """A detected liquidity pool derived from confirmed swing points."""
+
+    pool_id: str = Field(description="Unique stable identifier for this pool")
+    side: LiquiditySide
+    pool_type: LiquidityPoolType
+    price_level: float = Field(description="Center/anchor price level of the pool")
+    lower_bound: float = Field(description="Lower boundary of the pool zone")
+    upper_bound: float = Field(description="Upper boundary of the pool zone")
+    touch_count: int = Field(ge=0, description="Number of swings that contributed to this pool")
+    source_swings: list[int] = Field(
+        default_factory=list,
+        description="Indices of confirmed swings that define this pool",
+    )
+    source_timestamps: list[datetime] = Field(
+        default_factory=list,
+        description="Timestamps of source swings",
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="When this pool was created",
+    )
+    status: LiquidityPoolStatus = Field(default=LiquidityPoolStatus.ACTIVE)
+    strength: LiquidityStrength = Field(default=LiquidityStrength.LOW)
+    timeframe: str = Field(description="Timeframe this pool was detected on")
+
+
+class LiquiditySweep(BaseModel):
+    """A detected sweep event where price took an existing liquidity pool."""
+
+    sweep_id: str = Field(description="Unique identifier for this sweep event")
+    pool_id: str = Field(description="ID of the pool that was swept")
+    side: LiquiditySide
+    pool_price_level: float = Field(description="The pool's price level that was swept")
+    sweep_timestamp: datetime = Field(description="Timestamp of the candle that performed the sweep")
+    sweep_mode: LiquiditySweepMode = Field(description="Mode used to detect this sweep")
+    sweep_price: float = Field(description="Price that performed the sweep (wick or close)")
+    candle_close: float = Field(description="Close price of the sweeping candle")
+    reaction: PostSweepReaction = Field(default=PostSweepReaction.UNAVAILABLE)
+    reaction_timestamp: Optional[datetime] = Field(
+        default=None,
+        description="Timestamp of the candle used to classify the reaction",
+    )
+    timeframe: str = Field(description="Timeframe of the sweep")
+
+
+class LiquidityAnalysisResult(BaseModel):
+    """Complete liquidity analysis output."""
+
+    status: AnalysisStatus = Field(default=AnalysisStatus.UNAVAILABLE)
+    reason: str = Field(default="", description="Explanation of liquidity analysis status")
+
+    pools: list[LiquidityPool] = Field(default_factory=list)
+    sweeps: list[LiquiditySweep] = Field(default_factory=list)
+
+    active_pool_count: int = Field(default=0, ge=0)
+    swept_pool_count: int = Field(default=0, ge=0)
+
+    nearest_buy_side_pool: Optional[LiquidityPool] = Field(default=None)
+    nearest_sell_side_pool: Optional[LiquidityPool] = Field(default=None)
+
+    distance_to_buy_side: Optional[float] = Field(
+        default=None,
+        description="Absolute price distance to nearest active buy-side pool",
+    )
+    distance_to_sell_side: Optional[float] = Field(
+        default=None,
+        description="Absolute price distance to nearest active sell-side pool",
+    )
+    distance_to_buy_side_pct: Optional[float] = Field(
+        default=None,
+        description="Percentage distance to nearest active buy-side pool",
+    )
+    distance_to_sell_side_pct: Optional[float] = Field(
+        default=None,
+        description="Percentage distance to nearest active sell-side pool",
+    )
+
+
 class AnalysisResult(BaseModel):
     """
     Complete analysis output from the Market Analysis Engine.
@@ -286,6 +421,7 @@ class AnalysisResult(BaseModel):
     zones: Optional[ZonesResult] = None
     session: Optional[MarketSession] = None
     regime: Optional[RegimeResult] = None
+    liquidity: Optional[LiquidityAnalysisResult] = None
 
     # Timestamps
     analysis_timestamp: datetime = Field(

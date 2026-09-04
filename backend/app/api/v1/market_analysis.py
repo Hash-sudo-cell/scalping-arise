@@ -75,6 +75,7 @@ async def market_analysis_capabilities() -> dict:
             "support_resistance",
             "session_classification",
             "market_regime",
+            "liquidity_analysis",
         ],
         "configuration": {
             "min_candles_for_analysis": settings.min_candles_for_analysis,
@@ -84,6 +85,10 @@ async def market_analysis_capabilities() -> dict:
             "sr_zone_tolerance_pct": settings.sr_zone_tolerance_pct,
             "sr_min_swings": settings.sr_min_swings,
             "regime_trend_min_consecutive": settings.regime_trend_min_consecutive,
+            "liquidity_equal_level_tolerance_pct": settings.liquidity_equal_level_tolerance_pct,
+            "liquidity_min_touches": settings.liquidity_min_touches,
+            "liquidity_sweep_mode": settings.liquidity_sweep_mode,
+            "liquidity_max_active_pools": settings.liquidity_max_active_pools,
         },
         "supported_instruments": [i.value for i in Instrument],
         "supported_timeframes": [t.value for t in Timeframe],
@@ -115,7 +120,7 @@ async def market_analysis(
     Run the full market analysis pipeline.
 
     Returns structured analysis including trend, structure, BOS/CHOCH,
-    support/resistance, session, and market regime.
+    support/resistance, session, market regime, and liquidity context.
     """
     # Validate instrument
     try:
@@ -178,5 +183,23 @@ async def market_analysis(
 
     if result.regime:
         response["regime"] = result.regime.model_dump(mode="json")
+
+    if result.liquidity:
+        liquidity_data = result.liquidity.model_dump(mode="json")
+        # Simplify pool representation for API response
+        response["liquidity"] = {
+            "status": liquidity_data["status"],
+            "reason": liquidity_data["reason"],
+            "active_pool_count": liquidity_data["active_pool_count"],
+            "swept_pool_count": liquidity_data["swept_pool_count"],
+            "nearest_buy_side_pool": liquidity_data.get("nearest_buy_side_pool"),
+            "nearest_sell_side_pool": liquidity_data.get("nearest_sell_side_pool"),
+            "distance_to_buy_side": liquidity_data.get("distance_to_buy_side"),
+            "distance_to_sell_side": liquidity_data.get("distance_to_sell_side"),
+            "distance_to_buy_side_pct": liquidity_data.get("distance_to_buy_side_pct"),
+            "distance_to_sell_side_pct": liquidity_data.get("distance_to_sell_side_pct"),
+            "pool_count": len(liquidity_data.get("pools", [])),
+            "sweep_count": len(liquidity_data.get("sweeps", [])),
+        }
 
     return response
