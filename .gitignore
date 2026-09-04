@@ -1,0 +1,59 @@
+# ============================================================
+# Scalping Arise — Git Ignore
+# ============================================================
+
+# --- Environment (secrets) ---
+.env
+.env.local
+.env.*.local
+# Allow .env.example files (safe templates)
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# --- Virtual Environment ---
+venv/
+.venv/
+env/
+ENV/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# --- Testing ---
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Node.js (Frontend) ---
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- Logs ---
+*.log
+npm-debug.log*
+
+# --- Package lock (keep package-lock.json tracked) ---
+# package-lock.json is tracked — it ensures reproducible builds

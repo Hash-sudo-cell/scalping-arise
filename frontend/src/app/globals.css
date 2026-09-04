@@ -1,0 +1,185 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --color-bg: #0a0a0f;
+  --color-surface: #12121a;
+  --color-border: #1e1e2e;
+  --color-text: #e0e0e8;
+  --color-text-muted: #6b6b80;
+  --color-accent: #22c55e;
+  --color-accent-dim: #166534;
+  --color-warning: #eab308;
+  --color-error: #ef4444;
+  --color-checking: #3b82f6;
+  --font-mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+code,
+pre {
+  font-family: var(--font-mono);
+}
+
+/* ===== Home Page ===== */
+
+.home-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.5rem;
+  width: 100%;
+  max-width: 520px;
+}
+
+.home-hero {
+  text-align: center;
+}
+
+.home-title {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+
+.home-subtitle {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.home-badges {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.info-badge {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  padding: 0.35rem 0.75rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.home-footer {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.home-footer-sep {
+  opacity: 0.3;
+}
+
+/* ===== Health Card ===== */
+
+.health-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 100%;
+  max-width: 420px;
+}
+
+.health-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.health-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.health-status-label {
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.health-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.health-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.health-detail-key {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.health-detail-value {
+  font-size: 0.85rem;
+  font-family: var(--font-mono);
+  color: var(--color-text);
+}
+
+.health-error {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.health-error-key {
+  font-size: 0.7rem;
+  color: var(--color-error);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.health-error-value {
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  color: var(--color-error);
+  word-break: break-word;
+}
