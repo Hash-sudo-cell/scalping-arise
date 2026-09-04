@@ -3,6 +3,7 @@ import MarketDataStatus from "@/components/MarketDataStatus";
 import MarketAnalysisStatus from "@/components/MarketAnalysisStatus";
 import TechnicalFeaturesStatus from "@/components/TechnicalFeaturesStatus";
 import StrategyEvaluationStatus from "@/components/StrategyEvaluationStatus";
+import SignalEvaluationStatus from "@/components/SignalEvaluationStatus";
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Scalping Arise";
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0";
@@ -18,8 +19,8 @@ export default function Home() {
       </div>
 
       <div className="home-badges">
-        <div className="info-badge">Phase 5</div>
-        <div className="info-badge">Strategy Engine</div>
+        <div className="info-badge">Phase 6</div>
+        <div className="info-badge">Signal Engine</div>
         <div className="info-badge">v{APP_VERSION}</div>
       </div>
 
@@ -28,9 +29,10 @@ export default function Home() {
       <MarketAnalysisStatus />
       <TechnicalFeaturesStatus />
       <StrategyEvaluationStatus />
+      <SignalEvaluationStatus />
 
       <footer className="home-footer">
-        <span>Strategy Engine</span>
+        <span>Signal Engine</span>
         <span className="home-footer-sep">|</span>
         <span>Contextual analysis only — no trading signals</span>
       </footer>

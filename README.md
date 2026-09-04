@@ -18,7 +18,8 @@ Scalping Arise analyzes market data through progressive layers — from raw mark
 | Phase 4 Core | Technical Indicators & Feature Engine | **Complete** |
 | Phase 4 Extension | Multi-Timeframe, Volatility Classification, Feature Status | **Complete** |
 | Phase 5 | Strategy Definition & Evaluation | **Complete** |
-| Phase 6 | Signal Generation & Decision Engine | Planned |
+| Phase 5 Extension | Liquidity Integration | **Complete** |
+| Phase 6 | Signal & Confirmation Layer | **Complete** |
 | Phase 7 | Trade Planning & Risk Engine | Planned |
 | Phase 8 | News, Events & Performance Intelligence | Planned |
 | Phase 9 | Backtesting & Forward Testing | Planned |
@@ -65,15 +66,17 @@ scalping-arise/
 │   │   │   ├── market_data.py        # Phase 2 market data
 │   │   │   ├── market_analysis.py    # Phase 3 analysis
 │   │   │   ├── technical_features.py # Phase 4 features
-│   │   │   └── strategies.py         # Phase 5 strategy evaluation
+│   │   │   ├── strategies.py         # Phase 5 strategy evaluation
+│   │   │   └── signals.py            # Phase 6 signal evaluation
 │   │   ├── config/                   # Centralized settings
 │   │   ├── core/                     # Error handling, logging
 │   │   └── modules/
 │   │       ├── market_data/          # Phase 2 — Provider abstraction, caching, failover
 │   │       ├── market_analysis/      # Phase 3 — Structure, trend, BOS/CHOCH, S/R, regime, liquidity
 │   │       ├── technical_features/   # Phase 4 — EMA, RSI, MACD, ATR, BB, Volume, Price
-│   │       └── strategies/           # Phase 5 — Definitions, eligibility, condition engine, invalidation, quality
-│   ├── tests/                        # 459 tests
+│   │       ├── strategies/           # Phase 5 — Definitions, eligibility, condition engine, invalidation, quality
+│   │       └── signal_engine/        # Phase 6 — Candidate generation, MTF confirmation, conflicts, confidence, qualification
+│   ├── tests/                        # 519 tests
 │   ├── .env.example                  # Environment template
 │   ├── pyproject.toml                # pytest configuration
 │   └── requirements.txt              # Python dependencies
@@ -173,7 +176,7 @@ cd backend
 pytest -v
 ```
 
-Current baseline: **459 tests passing, 0 failures**.
+Current baseline: **519 tests passing, 0 failures**.
 
 ### Frontend
 
@@ -258,6 +261,30 @@ All endpoints are prefixed with `/api/v1`.
 - `instrument` — Canonical instrument (default: `XAU/USD`)
 - `timeframes` — Comma-separated timeframes (default: `15m,5m,1m`)
 - `candle_limit` — Candles per timeframe (default: 300)
+
+### Signal Evaluation (Phase 6)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/signals/health` | Signal engine health |
+| GET | `/api/v1/signals/capabilities` | Signal engine capabilities and thresholds |
+| GET | `/api/v1/signals/evaluate` | Full signal evaluation pipeline |
+
+**Parameters for evaluate:**
+- `instrument` — Canonical instrument (default: `XAU/USD`)
+- `timeframes` — Comma-separated timeframes (default: `1m,5m,15m`)
+- `limit` — Candles per timeframe (default: 300)
+- `strategy_ids` — Comma-separated strategy IDs to evaluate (default: all enabled)
+
+**Signal evaluation flow:**
+1. Collects Phase 3 (Market Analysis), Phase 4 (Technical Features), and Phase 5 (Strategy Evaluation) outputs
+2. Generates directional signal candidates from qualified strategies
+3. Evaluates multi-timeframe confirmation (EMA alignment + trend state)
+4. Detects directional conflicts between candidates
+5. Resolves conflicts using quality-weighted voting
+6. Aggregates all evidence (strategy, MTF, regime, structure, liquidity)
+7. Calculates composite confidence score (strategy alignment + MTF + evidence + regime)
+8. Qualifies the final signal (QUALIFIED / REJECTED / CONFLICT / INSUFFICIENT_CONTEXT)
 
 ---
 
