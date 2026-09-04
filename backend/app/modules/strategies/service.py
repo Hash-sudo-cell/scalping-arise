@@ -2,9 +2,10 @@
 Scalping Arise — Strategy Evaluation Service
 
 Central orchestration layer for strategy evaluation.
-Consumes outputs from Phase 3 (Market Analysis) and Phase 4 (Technical Features),
-applies strategy definitions through the eligibility gate, condition engine,
-invalidation evaluator, and quality scorer, producing structured evaluation results.
+Consumes outputs from Phase 3 (Market Analysis), Phase 4 (Technical Features),
+and Phase 3 Liquidity Extension, applies strategy definitions through the
+eligibility gate, condition engine, invalidation evaluator, and quality scorer,
+producing structured evaluation results with liquidity context.
 """
 
 from __future__ import annotations
@@ -22,12 +23,13 @@ from app.modules.technical_features.service import TechnicalFeatureService
 from app.modules.strategies.config import StrategyEngineSettings, get_strategy_engine_settings
 from app.modules.strategies.definitions import get_all_strategy_definitions, get_strategy_definition
 from app.modules.strategies.eligibility import run_eligibility_gate
-from app.modules.strategies.condition_engine import evaluate_conditions
+from app.modules.strategies.condition_engine import evaluate_conditions, evaluate_liquidity_conditions
 from app.modules.strategies.invalidation import evaluate_invalidation_rules
 from app.modules.strategies.quality import calculate_quality_score
 from app.modules.strategies.models import (
     ConditionStatus,
     EligibilityResult,
+    LiquidityConditionSummary,
     StrategyCapability,
     StrategyDefinition,
     StrategyDirection,
@@ -139,6 +141,7 @@ class StrategyEvaluationService:
         instrument: str = "XAU/USD",
         timeframes: Optional[list[str]] = None,
         candle_limit: int = 300,
+        liquidity_analysis: Optional[LiquidityAnalysisResult] = None,
     ) -> StrategyEvaluationResult:
         """
         Evaluate a single strategy against current market data.
@@ -148,10 +151,14 @@ class StrategyEvaluationService:
             instrument: Canonical instrument.
             timeframes: Timeframes to use for evaluation.
             candle_limit: Number of candles per timeframe.
+            liquidity_analysis: Optional Phase 3 liquidity analysis data.
 
         Returns:
-            StrategyEvaluationResult with full evaluation snapshot.
+            StrategyEvaluationResult with full evaluation snapshot including
+            liquidity context.
         """
+        from app.modules.market_analysis.models import LiquidityAnalysisResult
+
         # Look up strategy definition
         strategy = get_strategy_definition(strategy_id)
         if strategy is None:
@@ -276,6 +283,14 @@ class StrategyEvaluationService:
                 reason=eligibility.checks[-1].reason if eligibility.checks else "Not eligible",
             )
 
+        # --- Liquidity Condition Evaluation ---
+        liquidity_summary = evaluate_liquidity_conditions(
+            strategy=strategy,
+            liquidity=liquidity_analysis,
+            direction=direction,
+        )
+        liquidity_context_used = liquidity_analysis is not None and liquidity_analysis.status == "available"
+
         # --- Condition Evaluation ---
         condition_results = evaluate_conditions(
             strategy=strategy,
@@ -285,12 +300,13 @@ class StrategyEvaluationService:
             regime_state=regime_state,
         )
 
-        # --- Invalidation Evaluation ---
+        # --- Invalidation Evaluation (with liquidity context) ---
         invalidation_results = evaluate_invalidation_rules(
             strategy=strategy,
             analysis=analysis_result,
             direction=direction,
             regime_state=regime_state,
+            liquidity=liquidity_analysis,
         )
 
         # Check if any invalidation triggered
@@ -308,10 +324,20 @@ class StrategyEvaluationService:
             r.status == ConditionStatus.FAILED for r in required_conditions
         )
 
+        # Check if required liquidity conditions failed
+        any_liq_required_failed = liquidity_summary.any_required_failed if liquidity_summary else False
+
         if any_invalidated:
             status = StrategyEvaluationStatus.INVALIDATED
             reason_parts = [r.reason for r in invalidation_results if r.triggered]
             reason = "Invalidated: " + "; ".join(reason_parts)
+        elif any_liq_required_failed:
+            status = StrategyEvaluationStatus.NOT_QUALIFIED
+            failed_liq = [
+                r for r in (liquidity_summary.condition_results if liquidity_summary else [])
+                if r.status.value == "failed" and r.policy.value == "required"
+            ]
+            reason = "Required liquidity conditions failed: " + "; ".join(r.reason for r in failed_liq)
         elif all_required_passed:
             status = StrategyEvaluationStatus.QUALIFIED
             reason = "All required conditions passed, no invalidation triggered"
@@ -323,11 +349,12 @@ class StrategyEvaluationService:
             status = StrategyEvaluationStatus.NOT_QUALIFIED
             reason = "Evaluation complete — not all required conditions met"
 
-        # --- Quality Score ---
+        # --- Quality Score (with liquidity contribution) ---
         quality_score = calculate_quality_score(
             strategy=strategy,
             condition_results=condition_results,
             direction=direction,
+            liquidity_summary=liquidity_summary,
         )
 
         # --- Build Market Structure Summary ---
@@ -353,6 +380,8 @@ class StrategyEvaluationService:
             status=status,
             direction=direction,
             reason=reason,
+            liquidity_summary=liquidity_summary,
+            liquidity_context_used=liquidity_context_used,
         )
 
     async def evaluate_all_strategies(
@@ -360,11 +389,13 @@ class StrategyEvaluationService:
         instrument: str = "XAU/USD",
         timeframes: Optional[list[str]] = None,
         candle_limit: int = 300,
+        liquidity_analysis: Optional[LiquidityAnalysisResult] = None,
     ) -> list[StrategyEvaluationResult]:
         """
         Evaluate all enabled strategies.
 
         Returns a list of evaluation results, one per enabled strategy.
+        All strategies share the same liquidity analysis context.
         """
         strategies = get_all_strategy_definitions()
         enabled = [s for s in strategies if s.enabled]
@@ -376,6 +407,7 @@ class StrategyEvaluationService:
                 instrument=instrument,
                 timeframes=timeframes,
                 candle_limit=candle_limit,
+                liquidity_analysis=liquidity_analysis,
             )
             results.append(result)
 
@@ -421,6 +453,11 @@ class StrategyEvaluationService:
                     required_timeframes=[tr.timeframe for tr in s.required_timeframes],
                     source_compatibility_policy=s.source_compatibility_policy.value,
                     description=s.description,
+                    liquidity_conditions_count=len(s.liquidity_conditions),
+                    liquidity_required_count=sum(
+                        1 for lc in s.liquidity_conditions
+                        if lc.policy.value == "required"
+                    ),
                 ).model_dump()
                 for s in strategies
             ],

@@ -82,6 +82,22 @@ class TimeframeRole(str, Enum):
     OPTIONAL_CONFIRMATION = "optional_confirmation"
 
 
+class LiquidityConditionPolicy(str, Enum):
+    """How a liquidity condition participates in strategy evaluation."""
+
+    REQUIRED = "required"
+    OPTIONAL = "optional"
+    NOT_USED = "not_used"
+
+
+class LiquidityAvailability(str, Enum):
+    """Availability state of liquidity data during evaluation."""
+
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+    NOT_EVALUATED = "not_evaluated"
+
+
 # ---------------------------------------------------------------------------
 # Strategy Definition — explicit, structured strategy config
 # ---------------------------------------------------------------------------
@@ -116,6 +132,30 @@ class QualityWeight(BaseModel):
     category: str
     max_points: int = Field(ge=0, description="Maximum points for this category")
     weight: float = Field(ge=0.0, le=1.0, description="Normalized weight")
+
+
+class LiquidityConditionDefinition(BaseModel):
+    """A single liquidity condition within a strategy definition."""
+
+    condition_id: str
+    condition_name: str
+    description: str
+    policy: LiquidityConditionPolicy = Field(
+        default=LiquidityConditionPolicy.NOT_USED,
+        description="How this condition participates: required, optional, or not_used",
+    )
+    required_side: Optional[str] = Field(
+        default=None,
+        description="Required liquidity side (buy_side/sell_side) if applicable",
+    )
+    min_strength: Optional[str] = Field(
+        default=None,
+        description="Minimum pool strength (low/medium/high) if applicable",
+    )
+    max_distance_pct: Optional[float] = Field(
+        default=None,
+        description="Maximum proximity percentage threshold if applicable",
+    )
 
 
 class StrategyDefinition(BaseModel):
@@ -165,6 +205,18 @@ class StrategyDefinition(BaseModel):
     invalidation_rules: list[InvalidationRule] = Field(
         default_factory=list,
         description="Rules that can invalidate a strategy setup",
+    )
+
+    # Liquidity conditions
+    liquidity_conditions: list[LiquidityConditionDefinition] = Field(
+        default_factory=list,
+        description="Liquidity conditions evaluated as part of this strategy",
+    )
+
+    # Liquidity invalidation rules
+    liquidity_invalidation_rules: list[InvalidationRule] = Field(
+        default_factory=list,
+        description="Invalidation rules that check liquidity context",
     )
 
     # Quality scoring
@@ -263,6 +315,46 @@ class QualityScore(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Liquidity Condition Evaluation Result
+# ---------------------------------------------------------------------------
+
+class LiquidityConditionResult(BaseModel):
+    """Result of evaluating a single liquidity condition."""
+
+    condition_id: str
+    condition_name: str
+    description: str
+    policy: LiquidityConditionPolicy
+    status: ConditionStatus
+    expected_value: str
+    actual_value: str
+    reason: str
+    evidence: list[str] = Field(default_factory=list)
+
+
+class LiquidityAvailabilityStatus(BaseModel):
+    """Describes the overall availability of liquidity data during evaluation."""
+
+    status: LiquidityAvailability
+    reason: str = ""
+
+
+class LiquidityConditionSummary(BaseModel):
+    """Aggregated summary of all liquidity condition evaluations."""
+
+    available: bool
+    availability_status: LiquidityAvailabilityStatus
+    condition_results: list[LiquidityConditionResult] = Field(default_factory=list)
+    required_passed: int = Field(default=0, ge=0)
+    required_failed: int = Field(default=0, ge=0)
+    required_unavailable: int = Field(default=0, ge=0)
+    optional_passed: int = Field(default=0, ge=0)
+    optional_failed: int = Field(default=0, ge=0)
+    optional_unavailable: int = Field(default=0, ge=0)
+    any_required_failed: bool = False
+
+
+# ---------------------------------------------------------------------------
 # Timeframe Context for Evaluation
 # ---------------------------------------------------------------------------
 
@@ -329,6 +421,15 @@ class StrategyEvaluationResult(BaseModel):
     # Quality score
     quality_score: Optional[QualityScore] = None
 
+    # Liquidity evaluation summary
+    liquidity_summary: Optional[LiquidityConditionSummary] = None
+
+    # Liquidity context used during evaluation
+    liquidity_context_used: bool = Field(
+        default=False,
+        description="Whether liquidity data was available and consumed during evaluation",
+    )
+
     # Final status
     status: StrategyEvaluationStatus
     direction: StrategyDirection = StrategyDirection.NONE
@@ -352,3 +453,11 @@ class StrategyCapability(BaseModel):
     required_timeframes: list[str]
     source_compatibility_policy: str
     description: str
+    liquidity_conditions_count: int = Field(
+        default=0,
+        description="Number of liquidity conditions defined for this strategy",
+    )
+    liquidity_required_count: int = Field(
+        default=0,
+        description="Number of REQUIRED liquidity conditions",
+    )

@@ -1,7 +1,8 @@
 """
 Scalping Arise — Invalidation Evaluator
 
-Evaluates strategy-specific invalidation rules against current market data.
+Evaluates strategy-specific invalidation rules against current market data
+and liquidity context.
 """
 
 from __future__ import annotations
@@ -12,8 +13,16 @@ from typing import Optional
 from app.modules.market_analysis.models import (
     AnalysisResult,
     BOSDirection,
-    MarketRegime,
+    LiquidityAnalysisResult,
+    LiquidityPool,
+    LiquidityPoolStatus,
+    LiquiditySide,
+    LiquidityStrength,
+    PostSweepReaction,
     StructureLabel,
+)
+from app.modules.market_analysis.models import (
+    MarketRegime,
     TrendState,
 )
 from app.modules.strategies.models import (
@@ -31,16 +40,18 @@ def evaluate_invalidation_rules(
     analysis: Optional[AnalysisResult],
     direction: StrategyDirection,
     regime_state: Optional[str],
+    liquidity: Optional[LiquidityAnalysisResult] = None,
 ) -> list[InvalidationResult]:
     """
     Evaluate all invalidation rules for a strategy.
 
+    Now includes liquidity context for liquidity-aware invalidation.
     Returns a list of InvalidationResult for each rule.
     """
     results: list[InvalidationResult] = []
 
     for rule in strategy.invalidation_rules:
-        result = _evaluate_rule(rule, strategy, analysis, direction, regime_state)
+        result = _evaluate_rule(rule, strategy, analysis, direction, regime_state, liquidity)
         results.append(result)
 
     return results
@@ -52,6 +63,7 @@ def _evaluate_rule(
     analysis: Optional[AnalysisResult],
     direction: StrategyDirection,
     regime_state: Optional[str],
+    liquidity: Optional[LiquidityAnalysisResult] = None,
 ) -> InvalidationResult:
     """Dispatch to the appropriate rule evaluator."""
     evaluator = _RULE_EVALUATORS.get(rule.rule_id)
@@ -64,6 +76,9 @@ def _evaluate_rule(
             triggered=False,
             reason="No evaluator for this rule",
         )
+    # Liquidity evaluators receive liquidity parameter
+    if rule.rule_id.startswith("tc_liq_") or rule.rule_id.startswith("pc_liq_") or rule.rule_id.startswith("rr_liq_"):
+        return evaluator(rule, strategy, analysis, direction, regime_state, liquidity)
     return evaluator(rule, strategy, analysis, direction, regime_state)
 
 
@@ -327,15 +342,124 @@ def _eval_rr_inval_breakout(rule, strategy, analysis, direction, regime_state):
 
 
 # ---------------------------------------------------------------------------
+# Liquidity-aware invalidation evaluators
+# ---------------------------------------------------------------------------
+
+def _eval_tc_liq_inval_opposing_sweep(rule, strategy, analysis, direction, regime_state, liquidity=None):
+    """Trend Continuation: opposing sweep against trend direction."""
+    if liquidity is None or liquidity.status != "available" or not liquidity.sweeps:
+        return InvalidationResult(
+            rule_id=rule.rule_id,
+            rule_name=rule.rule_name,
+            description=rule.description,
+            triggered=False,
+            reason="No liquidity sweep data available",
+        )
+    # Sweeps against the trend direction
+    if direction == StrategyDirection.BULLISH:
+        opposing = [s for s in liquidity.sweeps if s.side == LiquiditySide.SELL_SIDE and s.strength in (LiquidityStrength.HIGH, LiquidityStrength.MEDIUM)]
+    elif direction == StrategyDirection.BEARISH:
+        opposing = [s for s in liquidity.sweeps if s.side == LiquiditySide.BUY_SIDE and s.strength in (LiquidityStrength.HIGH, LiquidityStrength.MEDIUM)]
+    else:
+        opposing = []
+    if opposing:
+        return InvalidationResult(
+            rule_id=rule.rule_id,
+            rule_name=rule.rule_name,
+            description=rule.description,
+            triggered=True,
+            reason=f"Strong opposing liquidity sweep(s) detected against {direction.value} trend",
+            evidence=[f"Sweep {s.sweep_id}: {s.side.value}, strength={s.strength.value}" for s in opposing[:3]],
+        )
+    return InvalidationResult(
+        rule_id=rule.rule_id,
+        rule_name=rule.rule_name,
+        description=rule.description,
+        triggered=False,
+        reason="No opposing liquidity sweep detected",
+    )
+
+
+def _eval_pc_liq_inval_opposing_sweep(rule, strategy, analysis, direction, regime_state, liquidity=None):
+    """Pullback Continuation: opposing sweep against trend direction."""
+    if liquidity is None or liquidity.status != "available" or not liquidity.sweeps:
+        return InvalidationResult(
+            rule_id=rule.rule_id,
+            rule_name=rule.rule_name,
+            description=rule.description,
+            triggered=False,
+            reason="No liquidity sweep data available",
+        )
+    if direction == StrategyDirection.BULLISH:
+        opposing = [s for s in liquidity.sweeps if s.side == LiquiditySide.SELL_SIDE and s.strength in (LiquidityStrength.HIGH, LiquidityStrength.MEDIUM)]
+    elif direction == StrategyDirection.BEARISH:
+        opposing = [s for s in liquidity.sweeps if s.side == LiquiditySide.BUY_SIDE and s.strength in (LiquidityStrength.HIGH, LiquidityStrength.MEDIUM)]
+    else:
+        opposing = []
+    if opposing:
+        return InvalidationResult(
+            rule_id=rule.rule_id,
+            rule_name=rule.rule_name,
+            description=rule.description,
+            triggered=True,
+            reason=f"Strong opposing liquidity sweep(s) detected against {direction.value} trend",
+            evidence=[f"Sweep {s.sweep_id}: {s.side.value}, strength={s.strength.value}" for s in opposing[:3]],
+        )
+    return InvalidationResult(
+        rule_id=rule.rule_id,
+        rule_name=rule.rule_name,
+        description=rule.description,
+        triggered=False,
+        reason="No opposing liquidity sweep detected",
+    )
+
+
+def _eval_rr_liq_inval_acceptance_after_sweep(rule, strategy, analysis, direction, regime_state, liquidity=None):
+    """Range Reversal: acceptance after sweep (price stays beyond pool level)."""
+    if liquidity is None or liquidity.status != "available" or not liquidity.sweeps:
+        return InvalidationResult(
+            rule_id=rule.rule_id,
+            rule_name=rule.rule_name,
+            description=rule.description,
+            triggered=False,
+            reason="No liquidity sweep data available",
+        )
+    # Check for sweeps with ACCEPTANCE reaction (invalidation signal)
+    acceptance_sweeps = [
+        s for s in liquidity.sweeps
+        if s.reaction == PostSweepReaction.ACCEPTANCE
+    ]
+    if acceptance_sweeps:
+        return InvalidationResult(
+            rule_id=rule.rule_id,
+            rule_name=rule.rule_name,
+            description=rule.description,
+            triggered=True,
+            reason=f"Sweep with ACCEPTANCE reaction detected — price may have accepted beyond pool level",
+            evidence=[f"Sweep {s.sweep_id}: {s.side.value}, reaction={s.reaction.value}" for s in acceptance_sweeps[:3]],
+        )
+    return InvalidationResult(
+        rule_id=rule.rule_id,
+        rule_name=rule.rule_name,
+        description=rule.description,
+        triggered=False,
+        reason="No sweep with acceptance reaction detected",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Rule evaluator registry
 # ---------------------------------------------------------------------------
 
 _RULE_EVALUATORS = {
     "tc_inval_choch": _eval_tc_inval_choch,
     "tc_inval_regime_shift": _eval_tc_inval_regime_shift,
+    "tc_liq_inval_opposing_sweep": _eval_tc_liq_inval_opposing_sweep,
     "pc_inval_structure_break": _eval_pc_inval_structure_break,
     "pc_inval_regime_shift": _eval_pc_inval_regime_shift,
     "pc_inval_deep_pullback": _eval_pc_inval_deep_pullback,
+    "pc_liq_inval_opposing_sweep": _eval_pc_liq_inval_opposing_sweep,
     "rr_inval_regime_change": _eval_rr_inval_regime_change,
     "rr_inval_breakout": _eval_rr_inval_breakout,
+    "rr_liq_inval_acceptance_after_sweep": _eval_rr_liq_inval_acceptance_after_sweep,
 }

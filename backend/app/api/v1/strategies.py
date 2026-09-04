@@ -251,4 +251,9 @@ def _serialize_evaluation_result(result) -> dict:
     if result.quality_score:
         response["quality_score"] = result.quality_score.model_dump()
 
+    # Liquidity context
+    response["liquidity_context_used"] = result.liquidity_context_used
+    if result.liquidity_summary:
+        response["liquidity_summary"] = result.liquidity_summary.model_dump()
+
     return response

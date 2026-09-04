@@ -13,6 +13,13 @@ from typing import Optional
 
 from app.modules.market_analysis.models import (
     AnalysisResult,
+    LiquidityAnalysisResult,
+    LiquidityPool,
+    LiquidityPoolStatus,
+    LiquidityPoolType,
+    LiquiditySide,
+    LiquidityStrength,
+    PostSweepReaction,
     MarketRegime,
     StructureLabel,
     TrendState,
@@ -22,6 +29,12 @@ from app.modules.strategies.models import (
     ConditionDefinition,
     ConditionResult,
     ConditionStatus,
+    LiquidityConditionDefinition,
+    LiquidityConditionPolicy,
+    LiquidityConditionResult,
+    LiquidityConditionSummary,
+    LiquidityAvailability,
+    LiquidityAvailabilityStatus,
     StrategyDefinition,
     StrategyDirection,
 )
@@ -782,3 +795,518 @@ def evaluate_conditions(
         results.append(result)
 
     return results
+
+
+# ---------------------------------------------------------------------------
+# Liquidity condition evaluators
+# ---------------------------------------------------------------------------
+
+def _liq_make_unavailable(condition: LiquidityConditionDefinition, reason: str) -> LiquidityConditionResult:
+    """Create an UNAVAILABLE liquidity condition result."""
+    return LiquidityConditionResult(
+        condition_id=condition.condition_id,
+        condition_name=condition.condition_name,
+        description=condition.description,
+        policy=condition.policy,
+        status=ConditionStatus.UNAVAILABLE,
+        expected_value="liquidity data available",
+        actual_value="unavailable",
+        reason=reason,
+        evidence=[],
+    )
+
+
+def _liq_make_passed(
+    condition: LiquidityConditionDefinition,
+    actual_value: str,
+    reason: str,
+    evidence: list[str] | None = None,
+) -> LiquidityConditionResult:
+    """Create a PASSED liquidity condition result."""
+    return LiquidityConditionResult(
+        condition_id=condition.condition_id,
+        condition_name=condition.condition_name,
+        description=condition.description,
+        policy=condition.policy,
+        status=ConditionStatus.PASSED,
+        expected_value="pass",
+        actual_value=actual_value,
+        reason=reason,
+        evidence=evidence or [],
+    )
+
+
+def _liq_make_failed(
+    condition: LiquidityConditionDefinition,
+    actual_value: str,
+    reason: str,
+    evidence: list[str] | None = None,
+) -> LiquidityConditionResult:
+    """Create a FAILED liquidity condition result."""
+    return LiquidityConditionResult(
+        condition_id=condition.condition_id,
+        condition_name=condition.condition_name,
+        description=condition.description,
+        policy=condition.policy,
+        status=ConditionStatus.FAILED,
+        expected_value="pass",
+        actual_value=actual_value,
+        reason=reason,
+        evidence=evidence or [],
+    )
+
+
+def _eval_liq_active_pool_presence(
+    condition: LiquidityConditionDefinition,
+    liquidity: Optional[LiquidityAnalysisResult],
+    direction: StrategyDirection,
+) -> LiquidityConditionResult:
+    """Check whether active liquidity pools exist."""
+    if liquidity is None or liquidity.status != "available":
+        return _liq_make_unavailable(condition, "Liquidity analysis not available")
+    active = [p for p in liquidity.pools if p.status == LiquidityPoolStatus.ACTIVE]
+    if active:
+        side_summary = f"buy_side={[p.pool_id for p in active if p.side == LiquiditySide.BUY_SIDE]}, sell_side={[p.pool_id for p in active if p.side == LiquiditySide.SELL_SIDE]}"
+        return _liq_make_passed(
+            condition,
+            actual_value=f"active_pools={len(active)}",
+            reason=f"{len(active)} active liquidity pool(s) detected",
+            evidence=[side_summary],
+        )
+    return _liq_make_failed(
+        condition,
+        actual_value="active_pools=0",
+        reason="No active liquidity pools detected",
+    )
+
+
+def _eval_liq_required_side(
+    condition: LiquidityConditionDefinition,
+    liquidity: Optional[LiquidityAnalysisResult],
+    direction: StrategyDirection,
+) -> LiquidityConditionResult:
+    """Check whether the required liquidity side has active pools."""
+    required_side_str = condition.required_side
+    if required_side_str is None:
+        return _liq_make_unavailable(condition, "No required side configured")
+    if liquidity is None or liquidity.status != "available":
+        return _liq_make_unavailable(condition, "Liquidity analysis not available")
+    try:
+        required_side = LiquiditySide(required_side_str)
+    except ValueError:
+        return _liq_make_unavailable(condition, f"Invalid required_side: {required_side_str}")
+    active_on_side = [
+        p for p in liquidity.pools
+        if p.status == LiquidityPoolStatus.ACTIVE and p.side == required_side
+    ]
+    if active_on_side:
+        return _liq_make_passed(
+            condition,
+            actual_value=f"{required_side_str}_active_pools={len(active_on_side)}",
+            reason=f"{len(active_on_side)} active {required_side_str} pool(s) present",
+            evidence=[f"Pools: {[p.pool_id for p in active_on_side]}"],
+        )
+    return _liq_make_failed(
+        condition,
+        actual_value=f"{required_side_str}_active_pools=0",
+        reason=f"No active {required_side_str} pools detected",
+    )
+
+
+def _eval_liq_pool_type(
+    condition: LiquidityConditionDefinition,
+    liquidity: Optional[LiquidityAnalysisResult],
+    direction: StrategyDirection,
+) -> LiquidityConditionResult:
+    """Check whether a specific pool type exists among active pools."""
+    required_type_str = condition.required_side  # Reuse field for pool type in this evaluator
+    if required_type_str is None:
+        return _liq_make_unavailable(condition, "No required pool type configured")
+    if liquidity is None or liquidity.status != "available":
+        return _liq_make_unavailable(condition, "Liquidity analysis not available")
+    try:
+        required_type = LiquidityPoolType(required_type_str)
+    except ValueError:
+        return _liq_make_unavailable(condition, f"Invalid pool type: {required_type_str}")
+    active_of_type = [
+        p for p in liquidity.pools
+        if p.status == LiquidityPoolStatus.ACTIVE and p.pool_type == required_type
+    ]
+    if active_of_type:
+        return _liq_make_passed(
+            condition,
+            actual_value=f"{required_type_str}_count={len(active_of_type)}",
+            reason=f"{len(active_of_type)} active {required_type_str} pool(s) present",
+            evidence=[f"Pools: {[p.pool_id for p in active_of_type]}"],
+        )
+    return _liq_make_failed(
+        condition,
+        actual_value=f"{required_type_str}_count=0",
+        reason=f"No active {required_type_str} pools detected",
+    )
+
+
+def _eval_liq_min_strength(
+    condition: LiquidityConditionDefinition,
+    liquidity: Optional[LiquidityAnalysisResult],
+    direction: StrategyDirection,
+) -> LiquidityConditionResult:
+    """Check whether at least one active pool meets the minimum strength."""
+    min_strength_str = condition.min_strength
+    if min_strength_str is None:
+        return _liq_make_unavailable(condition, "No minimum strength configured")
+    if liquidity is None or liquidity.status != "available":
+        return _liq_make_unavailable(condition, "Liquidity analysis not available")
+    strength_order = {"low": 1, "medium": 2, "high": 3}
+    min_val = strength_order.get(min_strength_str, 1)
+    active = [p for p in liquidity.pools if p.status == LiquidityPoolStatus.ACTIVE]
+    qualifying = [
+        p for p in active
+        if strength_order.get(p.strength.value, 0) >= min_val
+    ]
+    if qualifying:
+        return _liq_make_passed(
+            condition,
+            actual_value=f"qualifying_pools={len(qualifying)}, min_strength={min_strength_str}",
+            reason=f"{len(qualifying)} active pool(s) meet minimum strength '{min_strength_str}'",
+            evidence=[f"Qualifying: {[f'{p.pool_id}({p.strength.value})' for p in qualifying]}"],
+        )
+    return _liq_make_failed(
+        condition,
+        actual_value=f"qualifying_pools=0, min_strength={min_strength_str}",
+        reason=f"No active pools meet minimum strength '{min_strength_str}'",
+    )
+
+
+def _eval_liq_equal_highs(
+    condition: LiquidityConditionDefinition,
+    liquidity: Optional[LiquidityAnalysisResult],
+    direction: StrategyDirection,
+) -> LiquidityConditionResult:
+    """Check whether equal highs pools exist."""
+    if liquidity is None or liquidity.status != "available":
+        return _liq_make_unavailable(condition, "Liquidity analysis not available")
+    equal_highs = [
+        p for p in liquidity.pools
+        if p.pool_type == LiquidityPoolType.EQUAL_HIGHS
+        and p.status == LiquidityPoolStatus.ACTIVE
+    ]
+    if equal_highs:
+        return _liq_make_passed(
+            condition,
+            actual_value=f"equal_highs_count={len(equal_highs)}",
+            reason=f"{len(equal_highs)} active equal highs pool(s) detected",
+            evidence=[f"Pools: {[p.pool_id for p in equal_highs]}"],
+        )
+    return _liq_make_failed(
+        condition,
+        actual_value="equal_highs_count=0",
+        reason="No active equal highs pools detected",
+    )
+
+
+def _eval_liq_equal_lows(
+    condition: LiquidityConditionDefinition,
+    liquidity: Optional[LiquidityAnalysisResult],
+    direction: StrategyDirection,
+) -> LiquidityConditionResult:
+    """Check whether equal lows pools exist."""
+    if liquidity is None or liquidity.status != "available":
+        return _liq_make_unavailable(condition, "Liquidity analysis not available")
+    equal_lows = [
+        p for p in liquidity.pools
+        if p.pool_type == LiquidityPoolType.EQUAL_LOWS
+        and p.status == LiquidityPoolStatus.ACTIVE
+    ]
+    if equal_lows:
+        return _liq_make_passed(
+            condition,
+            actual_value=f"equal_lows_count={len(equal_lows)}",
+            reason=f"{len(equal_lows)} active equal lows pool(s) detected",
+            evidence=[f"Pools: {[p.pool_id for p in equal_lows]}"],
+        )
+    return _liq_make_failed(
+        condition,
+        actual_value="equal_lows_count=0",
+        reason="No active equal lows pools detected",
+    )
+
+
+def _eval_liq_sweep_presence(
+    condition: LiquidityConditionDefinition,
+    liquidity: Optional[LiquidityAnalysisResult],
+    direction: StrategyDirection,
+) -> LiquidityConditionResult:
+    """Check whether any sweep events have occurred."""
+    if liquidity is None or liquidity.status != "available":
+        return _liq_make_unavailable(condition, "Liquidity analysis not available")
+    if liquidity.sweeps:
+        return _liq_make_passed(
+            condition,
+            actual_value=f"sweep_count={len(liquidity.sweeps)}",
+            reason=f"{len(liquidity.sweeps)} sweep event(s) detected",
+            evidence=[f"Sweeps: {[s.sweep_id for s in liquidity.sweeps[:5]]}"],
+        )
+    return _liq_make_failed(
+        condition,
+        actual_value="sweep_count=0",
+        reason="No sweep events detected",
+    )
+
+
+def _eval_liq_sweep_direction(
+    condition: LiquidityConditionDefinition,
+    liquidity: Optional[LiquidityAnalysisResult],
+    direction: StrategyDirection,
+) -> LiquidityConditionResult:
+    """Check whether a sweep occurred on the required side."""
+    required_side_str = condition.required_side
+    if required_side_str is None:
+        return _liq_make_unavailable(condition, "No required sweep side configured")
+    if liquidity is None or liquidity.status != "available":
+        return _liq_make_unavailable(condition, "Liquidity analysis not available")
+    try:
+        required_side = LiquiditySide(required_side_str)
+    except ValueError:
+        return _liq_make_unavailable(condition, f"Invalid required_side: {required_side_str}")
+    matching_sweeps = [
+        s for s in liquidity.sweeps if s.side == required_side
+    ]
+    if matching_sweeps:
+        return _liq_make_passed(
+            condition,
+            actual_value=f"{required_side_str}_sweeps={len(matching_sweeps)}",
+            reason=f"{len(matching_sweeps)} {required_side_str} sweep(s) detected",
+            evidence=[f"Sweeps: {[s.sweep_id for s in matching_sweeps[:5]]}"],
+        )
+    return _liq_make_failed(
+        condition,
+        actual_value=f"{required_side_str}_sweeps=0",
+        reason=f"No {required_side_str} sweep events detected",
+    )
+
+
+def _eval_liq_post_sweep_reaction(
+    condition: LiquidityConditionDefinition,
+    liquidity: Optional[LiquidityAnalysisResult],
+    direction: StrategyDirection,
+) -> LiquidityConditionResult:
+    """Check whether any sweep has the expected post-sweep reaction."""
+    expected_reaction_str = condition.required_side  # Reuse field for expected reaction
+    if expected_reaction_str is None:
+        return _liq_make_unavailable(condition, "No expected reaction configured")
+    if liquidity is None or liquidity.status != "available":
+        return _liq_make_unavailable(condition, "Liquidity analysis not available")
+    try:
+        expected_reaction = PostSweepReaction(expected_reaction_str)
+    except ValueError:
+        return _liq_make_unavailable(condition, f"Invalid expected reaction: {expected_reaction_str}")
+    matching = [
+        s for s in liquidity.sweeps if s.reaction == expected_reaction
+    ]
+    if matching:
+        return _liq_make_passed(
+            condition,
+            actual_value=f"matching_reactions={len(matching)}, reaction={expected_reaction_str}",
+            reason=f"{len(matching)} sweep(s) with '{expected_reaction_str}' reaction",
+            evidence=[f"Sweeps: {[s.sweep_id for s in matching[:5]]}"],
+        )
+    return _liq_make_failed(
+        condition,
+        actual_value=f"matching_reactions=0, reaction={expected_reaction_str}",
+        reason=f"No sweeps with '{expected_reaction_str}' reaction found",
+    )
+
+
+def _eval_liq_max_proximity(
+    condition: LiquidityConditionDefinition,
+    liquidity: Optional[LiquidityAnalysisResult],
+    direction: StrategyDirection,
+) -> LiquidityConditionResult:
+    """Check whether nearest relevant liquidity is within max distance."""
+    max_dist = condition.max_distance_pct
+    if max_dist is None:
+        return _liq_make_unavailable(condition, "No max distance configured")
+    if liquidity is None or liquidity.status != "available":
+        return _liq_make_unavailable(condition, "Liquidity analysis not available")
+    # Determine which side to check based on strategy direction
+    if direction == StrategyDirection.BULLISH:
+        nearest = liquidity.nearest_buy_side_pool
+        dist_pct = liquidity.distance_to_buy_side_pct
+    elif direction == StrategyDirection.BEARISH:
+        nearest = liquidity.nearest_sell_side_pool
+        dist_pct = liquidity.distance_to_sell_side_pct
+    else:
+        # Neutral: check both sides
+        nearest_buy = liquidity.nearest_buy_side_pool
+        nearest_sell = liquidity.nearest_sell_side_pool
+        dist_buy_pct = liquidity.distance_to_buy_side_pct
+        dist_sell_pct = liquidity.distance_to_sell_side_pct
+        # Use whichever is closer
+        if dist_buy_pct is not None and dist_sell_pct is not None:
+            if dist_buy_pct <= dist_sell_pct:
+                nearest, dist_pct = nearest_buy, dist_buy_pct
+            else:
+                nearest, dist_pct = nearest_sell, dist_sell_pct
+        elif dist_buy_pct is not None:
+            nearest, dist_pct = nearest_buy, dist_buy_pct
+        elif dist_sell_pct is not None:
+            nearest, dist_pct = nearest_sell, dist_sell_pct
+        else:
+            nearest, dist_pct = None, None
+
+    if dist_pct is None:
+        return _liq_make_failed(
+            condition,
+            actual_value="distance_pct=None",
+            reason="No active liquidity pools with calculable proximity",
+        )
+    if dist_pct <= max_dist:
+        return _liq_make_passed(
+            condition,
+            actual_value=f"distance_pct={dist_pct:.4f}, max={max_dist}",
+            reason=f"Nearest liquidity within {max_dist}% threshold ({dist_pct:.4f}%)",
+            evidence=[f"Pool: {nearest.pool_id if nearest else 'none'}, distance: {dist_pct:.4f}%"],
+        )
+    return _liq_make_failed(
+        condition,
+        actual_value=f"distance_pct={dist_pct:.4f}, max={max_dist}",
+        reason=f"Nearest liquidity at {dist_pct:.4f}% — exceeds {max_dist}% threshold",
+        evidence=[f"Pool: {nearest.pool_id if nearest else 'none'}, distance: {dist_pct:.4f}%"],
+    )
+
+
+def _eval_liq_nearest_pool_state(
+    condition: LiquidityConditionDefinition,
+    liquidity: Optional[LiquidityAnalysisResult],
+    direction: StrategyDirection,
+) -> LiquidityConditionResult:
+    """Check the state (active/swept) of the nearest relevant pool."""
+    if liquidity is None or liquidity.status != "available":
+        return _liq_make_unavailable(condition, "Liquidity analysis not available")
+    if direction == StrategyDirection.BULLISH:
+        nearest = liquidity.nearest_buy_side_pool
+    elif direction == StrategyDirection.BEARISH:
+        nearest = liquidity.nearest_sell_side_pool
+    else:
+        nearest = liquidity.nearest_buy_side_pool or liquidity.nearest_sell_side_pool
+    if nearest is None:
+        return _liq_make_failed(
+            condition,
+            actual_value="nearest_pool=None",
+            reason="No nearest liquidity pool detected",
+        )
+    if nearest.status == LiquidityPoolStatus.ACTIVE:
+        return _liq_make_passed(
+            condition,
+            actual_value=f"pool_id={nearest.pool_id}, state=active",
+            reason=f"Nearest pool '{nearest.pool_id}' is active",
+            evidence=[f"Pool: {nearest.pool_id}, side: {nearest.side.value}, strength: {nearest.strength.value}"],
+        )
+    return _liq_make_failed(
+        condition,
+        actual_value=f"pool_id={nearest.pool_id}, state={nearest.status.value}",
+        reason=f"Nearest pool '{nearest.pool_id}' is {nearest.status.value}, not active",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Liquidity condition evaluator registry
+# ---------------------------------------------------------------------------
+
+_LIQUIDITY_EVALUATORS = {
+    "liq_active_pool_presence": _eval_liq_active_pool_presence,
+    "liq_required_side": _eval_liq_required_side,
+    "liq_pool_type": _eval_liq_pool_type,
+    "liq_min_strength": _eval_liq_min_strength,
+    "liq_equal_highs": _eval_liq_equal_highs,
+    "liq_equal_lows": _eval_liq_equal_lows,
+    "liq_sweep_presence": _eval_liq_sweep_presence,
+    "liq_sweep_direction": _eval_liq_sweep_direction,
+    "liq_post_sweep_reaction": _eval_liq_post_sweep_reaction,
+    "liq_max_proximity": _eval_liq_max_proximity,
+    "liq_nearest_pool_state": _eval_liq_nearest_pool_state,
+}
+
+
+def evaluate_liquidity_conditions(
+    strategy: StrategyDefinition,
+    liquidity: Optional[LiquidityAnalysisResult],
+    direction: StrategyDirection,
+) -> LiquidityConditionSummary:
+    """
+    Evaluate all liquidity conditions for a strategy.
+
+    Handles policy (REQUIRED / OPTIONAL / NOT_USED) and unavailable data.
+    Returns a structured LiquidityConditionSummary.
+    """
+    results: list[LiquidityConditionResult] = []
+
+    for lcond in strategy.liquidity_conditions:
+        # Skip NOT_USED conditions
+        if lcond.policy == LiquidityConditionPolicy.NOT_USED:
+            results.append(LiquidityConditionResult(
+                condition_id=lcond.condition_id,
+                condition_name=lcond.condition_name,
+                description=lcond.description,
+                policy=lcond.policy,
+                status=ConditionStatus.PASSED,
+                expected_value="not_used",
+                actual_value="not_used",
+                reason="Condition is NOT_USED — skipped",
+            ))
+            continue
+
+        evaluator = _LIQUIDITY_EVALUATORS.get(lcond.condition_id)
+        if evaluator is None:
+            results.append(_liq_make_unavailable(lcond, f"No evaluator for liquidity condition '{lcond.condition_id}'"))
+            continue
+
+        result = evaluator(lcond, liquidity, direction)
+        results.append(result)
+
+    # Compute aggregates
+    required_results = [r for r in results if r.policy == LiquidityConditionPolicy.REQUIRED]
+    optional_results = [r for r in results if r.policy == LiquidityConditionPolicy.OPTIONAL]
+
+    required_passed = sum(1 for r in required_results if r.status == ConditionStatus.PASSED)
+    required_failed = sum(1 for r in required_results if r.status == ConditionStatus.FAILED)
+    required_unavailable = sum(1 for r in required_results if r.status == ConditionStatus.UNAVAILABLE)
+    optional_passed = sum(1 for r in optional_results if r.status == ConditionStatus.PASSED)
+    optional_failed = sum(1 for r in optional_results if r.status == ConditionStatus.FAILED)
+    optional_unavailable = sum(1 for r in optional_results if r.status == ConditionStatus.UNAVAILABLE)
+
+    any_required_failed = required_failed > 0
+
+    # Determine overall availability
+    if liquidity is None or liquidity.status != "available":
+        avail_status = LiquidityAvailabilityStatus(
+            status=LiquidityAvailability.UNAVAILABLE,
+            reason="Liquidity analysis data not provided or unavailable",
+        )
+        available = False
+    elif not strategy.liquidity_conditions:
+        avail_status = LiquidityAvailabilityStatus(
+            status=LiquidityAvailability.NOT_EVALUATED,
+            reason="No liquidity conditions defined for this strategy",
+        )
+        available = False
+    else:
+        avail_status = LiquidityAvailabilityStatus(
+            status=LiquidityAvailability.AVAILABLE,
+            reason="Liquidity data available and conditions evaluated",
+        )
+        available = True
+
+    return LiquidityConditionSummary(
+        available=available,
+        availability_status=avail_status,
+        condition_results=results,
+        required_passed=required_passed,
+        required_failed=required_failed,
+        required_unavailable=required_unavailable,
+        optional_passed=optional_passed,
+        optional_failed=optional_failed,
+        optional_unavailable=optional_unavailable,
+        any_required_failed=any_required_failed,
+    )

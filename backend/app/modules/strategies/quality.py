@@ -15,6 +15,9 @@ from app.modules.strategies.models import (
     ConditionCriticality,
     ConditionResult,
     ConditionStatus,
+    LiquidityConditionPolicy,
+    LiquidityConditionResult,
+    LiquidityConditionSummary,
     QualityScore,
     QualityScoreBreakdown,
     QualityWeight,
@@ -29,6 +32,7 @@ def calculate_quality_score(
     strategy: StrategyDefinition,
     condition_results: list[ConditionResult],
     direction: StrategyDirection,
+    liquidity_summary: Optional[LiquidityConditionSummary] = None,
 ) -> QualityScore:
     """
     Calculate the quality score for a strategy evaluation.
@@ -41,6 +45,7 @@ def calculate_quality_score(
     - A failed CRITICAL or REQUIRED condition means the strategy is NOT_QUALIFIED
       regardless of quality score
     - Quality score is informational — it does NOT override qualification status
+    - Liquidity conditions contribute to the 'liquidity' category score
     """
     if not strategy.quality_weights:
         return QualityScore(
@@ -68,6 +73,14 @@ def calculate_quality_score(
     # Categories are inferred from condition_id prefixes
     category_map = _build_category_map(strategy)
 
+    # Add liquidity condition results to the category map
+    if liquidity_summary and liquidity_summary.condition_results:
+        liq_cat = "liquidity"
+        if liq_cat not in category_map:
+            category_map[liq_cat] = []
+        for lcond in liquidity_summary.condition_results:
+            category_map[liq_cat].append(lcond.condition_id)
+
     breakdown: list[QualityScoreBreakdown] = []
     total_score = 0
     total_max = 0
@@ -80,12 +93,21 @@ def calculate_quality_score(
         category_conditions = category_map.get(category, [])
 
         # Filter results for this category
-        cat_results = [
-            r for r in condition_results
-            if r.condition_id in category_conditions
-        ]
+        if category == "liquidity" and liquidity_summary:
+            # Liquidity conditions have their own result model
+            cat_liq_results = [
+                r for r in liquidity_summary.condition_results
+                if r.condition_id in category_conditions
+            ]
+            cat_results = []  # No regular ConditionResults for liquidity
+        else:
+            cat_liq_results = []
+            cat_results = [
+                r for r in condition_results
+                if r.condition_id in category_conditions
+            ]
 
-        if not cat_results:
+        if not cat_results and not cat_liq_results:
             # No conditions in this category — award partial credit if no failures
             awarded = max_pts // 2  # Default: 50% for no data
             breakdown.append(QualityScoreBreakdown(
@@ -98,38 +120,70 @@ def calculate_quality_score(
             total_max += max_pts
             continue
 
-        passed_count = sum(1 for r in cat_results if r.status == ConditionStatus.PASSED)
-        total_count = len(cat_results)
-
-        # Calculate points
-        if total_count > 0:
-            ratio = passed_count / total_count
-            awarded = int(max_pts * ratio)
+        # Calculate regular condition points
+        if cat_results:
+            passed_count = sum(1 for r in cat_results if r.status == ConditionStatus.PASSED)
+            total_count = len(cat_results)
+            if total_count > 0:
+                regular_ratio = passed_count / total_count
+                regular_awarded = int(max_pts * regular_ratio)
+            else:
+                regular_awarded = 0
+            cat_required_failed = any(
+                r.status == ConditionStatus.FAILED
+                and r.criticality in (ConditionCriticality.CRITICAL, ConditionCriticality.REQUIRED)
+                for r in cat_results
+            )
         else:
-            awarded = 0
+            regular_awarded = 0
+            cat_required_failed = False
+            passed_count = 0
+            total_count = 0
 
-        # If required conditions failed in this category, cap at 50%
-        cat_required_failed = any(
-            r.status == ConditionStatus.FAILED
-            and r.criticality in (ConditionCriticality.CRITICAL, ConditionCriticality.REQUIRED)
-            for r in cat_results
-        )
-        if cat_required_failed:
-            awarded = min(awarded, max_pts // 2)
+        # Calculate liquidity condition points
+        if cat_liq_results:
+            liq_passed = sum(1 for r in cat_liq_results if r.status.value == "passed")
+            liq_total = len(cat_liq_results)
+            if liq_total > 0:
+                liq_ratio = liq_passed / liq_total
+                liq_awarded = int(max_pts * liq_ratio)
+            else:
+                liq_awarded = 0
+            # Check if required liquidity conditions failed
+            liq_required_failed = any(
+                r.status.value == "failed" and r.policy == LiquidityConditionPolicy.REQUIRED
+                for r in cat_liq_results
+            )
+            # Combine regular and liquidity scores
+            awarded = regular_awarded + liq_awarded
+            if cat_required_failed or liq_required_failed:
+                awarded = min(awarded, max_pts // 2)
+        else:
+            liq_passed = 0
+            liq_total = 0
+            liq_required_failed = False
+            awarded = regular_awarded
+            if cat_required_failed:
+                awarded = min(awarded, max_pts // 2)
 
+        # Build reason string
         reason_parts = []
-        if passed_count == total_count:
-            reason_parts.append(f"All {total_count} conditions passed")
-        else:
+        if total_count > 0 and liq_total > 0:
+            reason_parts.append(f"Regular: {passed_count}/{total_count} passed, Liquidity: {liq_passed}/{liq_total} passed")
+        elif total_count > 0:
             reason_parts.append(f"{passed_count}/{total_count} conditions passed")
+        elif liq_total > 0:
+            reason_parts.append(f"Liquidity: {liq_passed}/{liq_total} conditions passed")
         if cat_required_failed:
             reason_parts.append("required condition(s) failed — capped")
+        if liq_required_failed:
+            reason_parts.append("required liquidity condition(s) failed — capped")
 
         breakdown.append(QualityScoreBreakdown(
             category=category,
             points_awarded=awarded,
             max_points=max_pts,
-            reason="; ".join(reason_parts),
+            reason="; ".join(reason_parts) if reason_parts else "No conditions",
         ))
         total_score += awarded
         total_max += max_pts

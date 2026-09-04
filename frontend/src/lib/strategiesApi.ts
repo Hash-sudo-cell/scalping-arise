@@ -69,6 +69,40 @@ export interface QualityScore {
   normalized_score: number;
 }
 
+// ---------------------------------------------------------------------------
+// Liquidity Types
+// ---------------------------------------------------------------------------
+
+export interface LiquidityConditionResult {
+  condition_id: string;
+  condition_name: string;
+  description: string;
+  policy: "required" | "optional" | "not_used";
+  status: "passed" | "failed" | "unavailable";
+  expected_value: string;
+  actual_value: string;
+  reason: string;
+  evidence: string[];
+}
+
+export interface LiquidityAvailabilityStatus {
+  status: "available" | "unavailable" | "not_evaluated";
+  reason: string;
+}
+
+export interface LiquidityConditionSummary {
+  available: boolean;
+  availability_status: LiquidityAvailabilityStatus;
+  condition_results: LiquidityConditionResult[];
+  required_passed: number;
+  required_failed: number;
+  required_unavailable: number;
+  optional_passed: number;
+  optional_failed: number;
+  optional_unavailable: number;
+  any_required_failed: boolean;
+}
+
 export interface StrategyEvaluationResponse {
   evaluation_id: string;
   evaluation_timestamp: string;
@@ -87,6 +121,8 @@ export interface StrategyEvaluationResponse {
   condition_results?: ConditionResult[];
   invalidation_results?: InvalidationResult[];
   quality_score?: QualityScore;
+  liquidity_context_used?: boolean;
+  liquidity_summary?: LiquidityConditionSummary;
 }
 
 export interface StrategyCapability {

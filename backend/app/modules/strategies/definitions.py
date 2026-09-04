@@ -17,6 +17,8 @@ from app.modules.strategies.models import (
     ConditionCriticality,
     ConditionDefinition,
     InvalidationRule,
+    LiquidityConditionDefinition,
+    LiquidityConditionPolicy,
     SourceCompatibilityPolicy,
     StrategyDefinition,
     TimeframeRequirement,
@@ -31,13 +33,13 @@ from app.modules.strategies.models import (
 
 TREND_CONTINUATION = StrategyDefinition(
     strategy_id="trend_continuation",
-    strategy_version="1.0",
+    strategy_version="2.0",
     strategy_name="Trend Continuation",
     description=(
         "Identifies setups where the market is in an established trend "
         "and conditions suggest the trend is likely to continue. "
-        "Uses trend alignment, momentum, market structure, and "
-        "multi-timeframe context."
+        "Uses trend alignment, momentum, market structure, "
+        "multi-timeframe context, and liquidity context."
     ),
     enabled=True,
     applicable_market_regimes=["trending_up", "trending_down"],
@@ -105,14 +107,43 @@ TREND_CONTINUATION = StrategyDefinition(
             description="Market regime shifting to ranging invalidates the trend continuation setup",
         ),
     ],
+    liquidity_conditions=[
+        LiquidityConditionDefinition(
+            condition_id="liq_active_pool_presence",
+            condition_name="Active Liquidity Pools",
+            description="At least one active liquidity pool should exist in the market",
+            policy=LiquidityConditionPolicy.OPTIONAL,
+        ),
+        LiquidityConditionDefinition(
+            condition_id="liq_sweep_presence",
+            condition_name="Sweep Context",
+            description="A liquidity sweep event may provide additional confirmation",
+            policy=LiquidityConditionPolicy.OPTIONAL,
+        ),
+        LiquidityConditionDefinition(
+            condition_id="liq_max_proximity",
+            condition_name="Liquidity Proximity",
+            description="Nearest relevant liquidity pool should be within 2.0% of price",
+            policy=LiquidityConditionPolicy.OPTIONAL,
+            max_distance_pct=2.0,
+        ),
+    ],
+    liquidity_invalidation_rules=[
+        InvalidationRule(
+            rule_id="tc_liq_inval_opposing_sweep",
+            rule_name="Opposing Sweep Detected",
+            description="A strong liquidity sweep against the trend direction may invalidate the setup",
+        ),
+    ],
     quality_weights=[
-        QualityWeight(category="structure", max_points=30, weight=0.30),
-        QualityWeight(category="regime", max_points=20, weight=0.20),
-        QualityWeight(category="multi_timeframe", max_points=20, weight=0.20),
+        QualityWeight(category="structure", max_points=25, weight=0.25),
+        QualityWeight(category="regime", max_points=15, weight=0.15),
+        QualityWeight(category="multi_timeframe", max_points=15, weight=0.15),
         QualityWeight(category="technical_features", max_points=20, weight=0.20),
         QualityWeight(category="optional_confirmations", max_points=10, weight=0.10),
+        QualityWeight(category="liquidity", max_points=15, weight=0.15),
     ],
-    scoring_model_version="1.0",
+    scoring_model_version="2.0",
 )
 
 
@@ -122,14 +153,15 @@ TREND_CONTINUATION = StrategyDefinition(
 
 PULLBACK_CONTINUATION = StrategyDefinition(
     strategy_id="pullback_continuation",
-    strategy_version="1.0",
+    strategy_version="2.0",
     strategy_name="Pullback Continuation",
     description=(
         "Identifies setups where the market is in an established trend "
         "but has experienced a pullback, and conditions suggest the "
         "pullback is temporary and the primary trend will resume. "
         "Uses trend context, pullback detection via structure, "
-        "support/resistance, EMA/price relationship, and momentum recovery."
+        "support/resistance, EMA/price relationship, momentum recovery, "
+        "and liquidity context."
     ),
     enabled=True,
     applicable_market_regimes=["trending_up", "trending_down"],
@@ -208,14 +240,50 @@ PULLBACK_CONTINUATION = StrategyDefinition(
             description="Pullback exceeds 61.8% of the prior trend move — no longer a pullback",
         ),
     ],
-    quality_weights=[
-        QualityWeight(category="structure", max_points=25, weight=0.25),
-        QualityWeight(category="regime", max_points=15, weight=0.15),
-        QualityWeight(category="multi_timeframe", max_points=20, weight=0.20),
-        QualityWeight(category="technical_features", max_points=25, weight=0.25),
-        QualityWeight(category="optional_confirmations", max_points=15, weight=0.15),
+    liquidity_conditions=[
+        LiquidityConditionDefinition(
+            condition_id="liq_active_pool_presence",
+            condition_name="Active Liquidity Pools",
+            description="Active liquidity pools provide context for the pullback zone",
+            policy=LiquidityConditionPolicy.OPTIONAL,
+        ),
+        LiquidityConditionDefinition(
+            condition_id="liq_required_side",
+            condition_name="Relevant Liquidity Side",
+            description="Liquidity on the trend-continuation side should be present",
+            policy=LiquidityConditionPolicy.OPTIONAL,
+            required_side="buy_side",
+        ),
+        LiquidityConditionDefinition(
+            condition_id="liq_sweep_presence",
+            condition_name="Sweep Context",
+            description="A liquidity sweep may confirm the pullback has taken liquidity before reversal",
+            policy=LiquidityConditionPolicy.OPTIONAL,
+        ),
+        LiquidityConditionDefinition(
+            condition_id="liq_max_proximity",
+            condition_name="Liquidity Proximity",
+            description="Nearest relevant liquidity pool should be within 1.5% of price",
+            policy=LiquidityConditionPolicy.OPTIONAL,
+            max_distance_pct=1.5,
+        ),
     ],
-    scoring_model_version="1.0",
+    liquidity_invalidation_rules=[
+        InvalidationRule(
+            rule_id="pc_liq_inval_opposing_sweep",
+            rule_name="Opposing Sweep Against Trend",
+            description="A liquidity sweep against the trend direction may invalidate the pullback setup",
+        ),
+    ],
+    quality_weights=[
+        QualityWeight(category="structure", max_points=20, weight=0.20),
+        QualityWeight(category="regime", max_points=10, weight=0.10),
+        QualityWeight(category="multi_timeframe", max_points=15, weight=0.15),
+        QualityWeight(category="technical_features", max_points=20, weight=0.20),
+        QualityWeight(category="optional_confirmations", max_points=10, weight=0.10),
+        QualityWeight(category="liquidity", max_points=25, weight=0.25),
+    ],
+    scoring_model_version="2.0",
 )
 
 
@@ -225,13 +293,13 @@ PULLBACK_CONTINUATION = StrategyDefinition(
 
 RANGE_REVERSAL = StrategyDefinition(
     strategy_id="range_reversal",
-    strategy_version="1.0",
+    strategy_version="2.0",
     strategy_name="Range Reversal",
     description=(
         "Identifies setups where the market is in a ranging regime and "
         "conditions suggest a reversal from a range boundary. Uses "
         "support/resistance zones, price position, RSI extremes, "
-        "Bollinger Bands, and multi-timeframe context."
+        "Bollinger Bands, multi-timeframe context, and liquidity context."
     ),
     enabled=True,
     applicable_market_regimes=["ranging"],
@@ -299,14 +367,62 @@ RANGE_REVERSAL = StrategyDefinition(
             description="A strong structure break beyond the range boundary invalidates the reversal",
         ),
     ],
-    quality_weights=[
-        QualityWeight(category="structure", max_points=25, weight=0.25),
-        QualityWeight(category="regime", max_points=20, weight=0.20),
-        QualityWeight(category="multi_timeframe", max_points=15, weight=0.15),
-        QualityWeight(category="technical_features", max_points=25, weight=0.25),
-        QualityWeight(category="optional_confirmations", max_points=15, weight=0.15),
+    liquidity_conditions=[
+        LiquidityConditionDefinition(
+            condition_id="liq_active_pool_presence",
+            condition_name="Active Liquidity Pools",
+            description="Active liquidity pools at range boundaries provide reversal context",
+            policy=LiquidityConditionPolicy.REQUIRED,
+        ),
+        LiquidityConditionDefinition(
+            condition_id="liq_equal_highs",
+            condition_name="Equal Highs",
+            description="Equal highs near the upper range boundary indicate pooled buy-side liquidity",
+            policy=LiquidityConditionPolicy.OPTIONAL,
+        ),
+        LiquidityConditionDefinition(
+            condition_id="liq_equal_lows",
+            condition_name="Equal Lows",
+            description="Equal lows near the lower range boundary indicate pooled sell-side liquidity",
+            policy=LiquidityConditionPolicy.OPTIONAL,
+        ),
+        LiquidityConditionDefinition(
+            condition_id="liq_sweep_presence",
+            condition_name="Sweep Context",
+            description="A liquidity sweep at the range boundary confirms liquidity was taken",
+            policy=LiquidityConditionPolicy.OPTIONAL,
+        ),
+        LiquidityConditionDefinition(
+            condition_id="liq_post_sweep_reaction",
+            condition_name="Post-Sweep Rejection",
+            description="After a sweep, price should reject (return through the pool level)",
+            policy=LiquidityConditionPolicy.OPTIONAL,
+            required_side="rejection",
+        ),
+        LiquidityConditionDefinition(
+            condition_id="liq_max_proximity",
+            condition_name="Liquidity Proximity",
+            description="Nearest relevant liquidity pool should be within 1.0% of price",
+            policy=LiquidityConditionPolicy.REQUIRED,
+            max_distance_pct=1.0,
+        ),
     ],
-    scoring_model_version="1.0",
+    liquidity_invalidation_rules=[
+        InvalidationRule(
+            rule_id="rr_liq_inval_acceptance_after_sweep",
+            rule_name="Acceptance After Sweep",
+            description="If a sweep is followed by acceptance (price stays beyond pool level), the reversal may be invalidated",
+        ),
+    ],
+    quality_weights=[
+        QualityWeight(category="structure", max_points=20, weight=0.20),
+        QualityWeight(category="regime", max_points=15, weight=0.15),
+        QualityWeight(category="multi_timeframe", max_points=10, weight=0.10),
+        QualityWeight(category="technical_features", max_points=20, weight=0.20),
+        QualityWeight(category="optional_confirmations", max_points=10, weight=0.10),
+        QualityWeight(category="liquidity", max_points=25, weight=0.25),
+    ],
+    scoring_model_version="2.0",
 )
 
 

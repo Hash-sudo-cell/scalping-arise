@@ -288,6 +288,41 @@ function StrategyCard({
         </>
       )}
 
+      {/* Liquidity Section */}
+      {ev.liquidity_summary && ev.liquidity_summary.available && (
+        <>
+          <div className="tf-section">Liquidity</div>
+          <div className="tf-row">
+            <span className="tf-key">Status</span>
+            <span className="tf-value" style={{ color: ev.liquidity_summary.availability_status.status === "available" ? "var(--color-accent)" : "var(--color-text-muted)", fontSize: "0.75rem" }}>
+              {ev.liquidity_summary.availability_status.status}
+            </span>
+          </div>
+          {ev.liquidity_summary.condition_results.map((lr) => (
+            <div key={lr.condition_id} className="tf-row" style={{ gap: "0.5rem" }}>
+              <span className="tf-key" style={{ flex: 1, fontSize: "0.7rem" }}>
+                {lr.condition_name}
+                <span style={{ color: lr.policy === "required" ? "var(--color-warning)" : "var(--color-text-muted)", marginLeft: "0.3rem", fontSize: "0.6rem" }}>
+                  [{lr.policy}]
+                </span>
+              </span>
+              <span className="tf-value" style={{ color: conditionStatusColor(lr.status), fontSize: "0.75rem" }}>
+                {lr.status}
+              </span>
+            </div>
+          ))}
+        </>
+      )}
+
+      {ev.liquidity_context_used === false && ev.liquidity_summary && !ev.liquidity_summary.available && (
+        <div className="tf-row">
+          <span className="tf-key">Liquidity</span>
+          <span className="tf-value" style={{ color: "var(--color-text-muted)", fontSize: "0.75rem" }}>
+            Not available
+          </span>
+        </div>
+      )}
+
       {ev.reason && (
         <div className="tf-reason">
           <span className="tf-reason-text">{ev.reason}</span>

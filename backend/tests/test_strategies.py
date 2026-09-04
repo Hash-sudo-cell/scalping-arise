@@ -281,7 +281,7 @@ class TestStrategyDefinitions:
         assert s is not None
         assert s.strategy_id == "trend_continuation"
         assert s.strategy_name == "Trend Continuation"
-        assert s.strategy_version == "1.0"
+        assert s.strategy_version == "2.0"
         assert s.enabled is True
 
     def test_get_strategy_definition_invalid(self):
