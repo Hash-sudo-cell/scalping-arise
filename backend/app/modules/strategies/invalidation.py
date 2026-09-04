@@ -50,7 +50,13 @@ def evaluate_invalidation_rules(
     """
     results: list[InvalidationResult] = []
 
+    # Evaluate core invalidation rules
     for rule in strategy.invalidation_rules:
+        result = _evaluate_rule(rule, strategy, analysis, direction, regime_state, liquidity)
+        results.append(result)
+
+    # Evaluate liquidity-specific invalidation rules
+    for rule in strategy.liquidity_invalidation_rules:
         result = _evaluate_rule(rule, strategy, analysis, direction, regime_state, liquidity)
         results.append(result)
 

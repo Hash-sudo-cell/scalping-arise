@@ -16,8 +16,8 @@ Scalping Arise analyzes market data through progressive layers — from raw mark
 | Phase 2 | Market Data Infrastructure | **Complete & Corrected** |
 | Phase 3 | Market Analysis & Structure Engine | **Complete** |
 | Phase 4 Core | Technical Indicators & Feature Engine | **Complete** |
-| Phase 4 Extension | Multi-Timeframe, Volatility Classification, Feature Status | **Not Yet Implemented** |
-| Phase 5 | Strategy Definition & Evaluation | Planned |
+| Phase 4 Extension | Multi-Timeframe, Volatility Classification, Feature Status | **Complete** |
+| Phase 5 | Strategy Definition & Evaluation | **Complete** |
 | Phase 6 | Signal Generation & Decision Engine | Planned |
 | Phase 7 | Trade Planning & Risk Engine | Planned |
 | Phase 8 | News, Events & Performance Intelligence | Planned |
@@ -64,14 +64,16 @@ scalping-arise/
 │   │   │   ├── health.py             # System health
 │   │   │   ├── market_data.py        # Phase 2 market data
 │   │   │   ├── market_analysis.py    # Phase 3 analysis
-│   │   │   └── technical_features.py # Phase 4 features
+│   │   │   ├── technical_features.py # Phase 4 features
+│   │   │   └── strategies.py         # Phase 5 strategy evaluation
 │   │   ├── config/                   # Centralized settings
 │   │   ├── core/                     # Error handling, logging
 │   │   └── modules/
 │   │       ├── market_data/          # Phase 2 — Provider abstraction, caching, failover
-│   │       ├── market_analysis/      # Phase 3 — Structure, trend, BOS/CHOCH, S/R, regime
-│   │       └── technical_features/   # Phase 4 — EMA, RSI, MACD, ATR, BB, Volume, Price
-│   ├── tests/                        # 313 tests
+│   │       ├── market_analysis/      # Phase 3 — Structure, trend, BOS/CHOCH, S/R, regime, liquidity
+│   │       ├── technical_features/   # Phase 4 — EMA, RSI, MACD, ATR, BB, Volume, Price
+│   │       └── strategies/           # Phase 5 — Definitions, eligibility, condition engine, invalidation, quality
+│   ├── tests/                        # 459 tests
 │   ├── .env.example                  # Environment template
 │   ├── pyproject.toml                # pytest configuration
 │   └── requirements.txt              # Python dependencies
@@ -82,11 +84,13 @@ scalping-arise/
 │   │   │   ├── HealthStatus.tsx
 │   │   │   ├── MarketDataStatus.tsx
 │   │   │   ├── MarketAnalysisStatus.tsx
-│   │   │   └── TechnicalFeaturesStatus.tsx
+│   │   │   ├── TechnicalFeaturesStatus.tsx
+│   │   │   └── StrategyEvaluationStatus.tsx
 │   │   └── lib/                      # Typed API clients
 │   │       ├── api.ts
 │   │       ├── analysisApi.ts
-│   │       └── featuresApi.ts
+│   │       ├── featuresApi.ts
+│   │       └── strategiesApi.ts
 │   ├── .env.example                  # Frontend environment template
 │   ├── package.json
 │   └── tsconfig.json
@@ -169,7 +173,7 @@ cd backend
 pytest -v
 ```
 
-Current baseline: **313 tests passing, 0 failures**.
+Current baseline: **459 tests passing, 0 failures**.
 
 ### Frontend
 
@@ -233,6 +237,27 @@ All endpoints are prefixed with `/api/v1`.
 **Parameters for multi-timeframe:**
 - `timeframes` — Comma-separated timeframes (default: `1m,5m,15m`)
 - `limit` — Number of candles per timeframe (50–5000, default: 300)
+
+### Strategy Evaluation (Phase 5)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/strategies/health` | Strategy engine health |
+| GET | `/api/v1/strategies/capabilities` | Strategy capabilities and registered strategies |
+| GET | `/api/v1/strategies` | List all strategy definitions |
+| GET | `/api/v1/strategies/evaluate` | Evaluate a single strategy |
+| GET | `/api/v1/strategies/evaluate-all` | Evaluate all enabled strategies |
+
+**Parameters for evaluate:**
+- `strategy_id` — Strategy to evaluate (required). Options: `trend_continuation`, `pullback_continuation`, `range_reversal`
+- `instrument` — Canonical instrument (default: `XAU/USD`)
+- `timeframes` — Comma-separated timeframes (default: `15m,5m,1m`)
+- `candle_limit` — Candles per timeframe (default: 300)
+
+**Parameters for evaluate-all:**
+- `instrument` — Canonical instrument (default: `XAU/USD`)
+- `timeframes` — Comma-separated timeframes (default: `15m,5m,1m`)
+- `candle_limit` — Candles per timeframe (default: 300)
 
 ---
 

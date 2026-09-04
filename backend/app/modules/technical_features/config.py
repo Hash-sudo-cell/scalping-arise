@@ -114,6 +114,8 @@ class TechnicalFeaturesSettings(BaseSettings):
             errors.append("atr_period must be > 0")
         if self.atr_extreme_threshold_pct <= self.atr_high_threshold_pct:
             errors.append("atr_extreme_threshold_pct must be > atr_high_threshold_pct")
+        if self.atr_low_threshold_pct >= self.atr_high_threshold_pct:
+            errors.append("atr_low_threshold_pct must be < atr_high_threshold_pct")
 
         if self.bb_period <= 0:
             errors.append("bb_period must be > 0")

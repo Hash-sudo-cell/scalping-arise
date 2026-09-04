@@ -1577,3 +1577,93 @@ class TestMultiTimeframeModels:
         data = result.model_dump(mode="json")
         assert data["feature_set_status"] == "unavailable"
         assert data["volatility_classification_reason"] == ""
+
+
+# ---------------------------------------------------------------------------
+# Regression: Bollinger Bands uses sample std dev (BUG#2 fix)
+# ---------------------------------------------------------------------------
+
+class TestBollingerSampleStdDev:
+    """Regression test: Bollinger Bands must use sample standard deviation (N-1)."""
+
+    def test_bollinger_uses_sample_std_not_population(self):
+        """
+        With N=20 data points, population std divides by 20, sample divides by 19.
+        Verify the bands use sample std (Bollinger's original definition).
+        """
+        import math
+        # Create 20 candles with known close prices
+        closes = [100.0 + i * 0.5 for i in range(20)]
+        candles = _make_candles(closes)
+        result = calculate_bollinger_bands(candles, period=20, std_dev=2.0)
+
+        assert result.availability == FeatureAvailability.AVAILABLE
+
+        # Manually compute expected values using sample std (N-1)
+        middle = sum(closes) / 20
+        sample_variance = sum((c - middle) ** 2 for c in closes) / 19  # N-1
+        sample_sd = math.sqrt(sample_variance)
+        expected_upper = middle + 2.0 * sample_sd
+        expected_lower = middle - 2.0 * sample_sd
+
+        assert abs(result.middle_band - middle) < 1e-4
+        assert abs(result.upper_band - expected_upper) < 1e-4
+        assert abs(result.lower_band - expected_lower) < 1e-4
+
+    def test_bollinger_not_population_std(self):
+        """
+        Verify population std (divide by N) produces different result than what we calculate.
+        If someone reverts the fix, this test catches it.
+        """
+        import math
+        closes = [100.0 + i * 0.5 for i in range(20)]
+        candles = _make_candles(closes)
+        result = calculate_bollinger_bands(candles, period=20, std_dev=2.0)
+
+        middle = sum(closes) / 20
+        population_sd = math.sqrt(sum((c - middle) ** 2 for c in closes) / 20)
+        sample_sd = math.sqrt(sum((c - middle) ** 2 for c in closes) / 19)
+
+        # Population and sample SD differ
+        assert population_sd != sample_sd
+        # Result should match sample, NOT population
+        expected_with_population = middle + 2.0 * population_sd
+        assert abs(result.upper_band - expected_with_population) > 0.001, (
+            "Bollinger Bands upper band matches population std — fix was reverted!"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Regression: ATR threshold ordering validation (BUG#3 fix)
+# ---------------------------------------------------------------------------
+
+class TestATRThresholdValidation:
+    """Regression test: ATR thresholds must be logically ordered."""
+
+    def test_low_threshold_must_be_below_high(self):
+        """atr_low_threshold_pct must be < atr_high_threshold_pct."""
+        with pytest.raises(ValueError, match="atr_low_threshold_pct must be < atr_high_threshold_pct"):
+            TechnicalFeaturesSettings(
+                atr_low_threshold_pct=5.0,
+                atr_high_threshold_pct=1.5,
+                atr_extreme_threshold_pct=3.0,
+            )
+
+    def test_valid_thresholds_accepted(self):
+        """Valid threshold ordering should not raise."""
+        settings = TechnicalFeaturesSettings(
+            atr_low_threshold_pct=0.3,
+            atr_high_threshold_pct=1.5,
+            atr_extreme_threshold_pct=3.0,
+        )
+        assert settings.atr_low_threshold_pct == 0.3
+        assert settings.atr_high_threshold_pct == 1.5
+        assert settings.atr_extreme_threshold_pct == 3.0
+
+    def test_extreme_must_be_above_high(self):
+        """atr_extreme_threshold_pct must be > atr_high_threshold_pct."""
+        with pytest.raises(ValueError, match="atr_extreme_threshold_pct must be > atr_high_threshold_pct"):
+            TechnicalFeaturesSettings(
+                atr_extreme_threshold_pct=1.0,
+                atr_high_threshold_pct=1.5,
+            )

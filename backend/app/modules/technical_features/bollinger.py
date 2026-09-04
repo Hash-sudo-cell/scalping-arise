@@ -64,8 +64,8 @@ def calculate_bollinger_bands(
     # Middle band = SMA
     middle = sum(window) / period
 
-    # Standard deviation (population)
-    variance = sum((c - middle) ** 2 for c in window) / period
+    # Standard deviation (sample — Bollinger's original definition uses N-1)
+    variance = sum((c - middle) ** 2 for c in window) / (period - 1)
     sd = variance ** 0.5
 
     upper = middle + (std_dev * sd)

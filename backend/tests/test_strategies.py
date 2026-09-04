@@ -992,3 +992,101 @@ class TestStrategiesAPI:
             assert "strategy_id" in s
             assert "enabled" in s
             assert "source_compatibility_policy" in s
+
+
+# ---------------------------------------------------------------------------
+# Regression: Liquidity invalidation rules must be evaluated (BUG#1 fix)
+# ---------------------------------------------------------------------------
+
+class TestLiquidityInvalidationRegression:
+    """Regression tests for liquidity invalidation rules being evaluated."""
+
+    def test_liquidity_invalidation_rules_are_included(self):
+        """Liquidity invalidation rules must be evaluated alongside core rules."""
+        strategy = TREND_CONTINUATION
+        # Verify strategy defines liquidity invalidation rules
+        assert len(strategy.liquidity_invalidation_rules) > 0
+        rule_ids = [r.rule_id for r in strategy.liquidity_invalidation_rules]
+        assert "tc_liq_inval_opposing_sweep" in rule_ids
+
+    def test_evaluate_invalidation_includes_liquidity_rules(self):
+        """evaluate_invalidation_rules must produce results for liquidity rules."""
+        from app.modules.market_analysis.models import (
+            LiquidityAnalysisResult,
+            AnalysisStatus,
+        )
+
+        strategy = TREND_CONTINUATION
+        # Build analysis with a bullish trend
+        analysis = _rising_analysis()
+        direction = StrategyDirection.BULLISH
+
+        # Build empty liquidity context (no sweeps → liquidity rules should NOT trigger)
+        liquidity = LiquidityAnalysisResult(
+            status=AnalysisStatus.AVAILABLE,
+            pools=[],
+            sweeps=[],
+            nearest_buy_side_pool=None,
+            nearest_sell_side_pool=None,
+            distance_to_buy_side_pct=None,
+            distance_to_sell_side_pct=None,
+        )
+
+        results = evaluate_invalidation_rules(
+            strategy=strategy,
+            analysis=analysis,
+            direction=direction,
+            regime_state="trending_up",
+            liquidity=liquidity,
+        )
+
+        # Must include results for BOTH core AND liquidity rules
+        rule_ids = [r.rule_id for r in results]
+        # Core rules present
+        assert "tc_inval_choch" in rule_ids
+        assert "tc_inval_regime_shift" in rule_ids
+        # Liquidity rules now present (was missing before fix)
+        assert "tc_liq_inval_opposing_sweep" in rule_ids
+
+    def test_liquidity_rule_not_triggered_when_no_sweeps(self):
+        """Liquidity invalidation rule should not trigger when no sweeps exist."""
+        from app.modules.market_analysis.models import (
+            LiquidityAnalysisResult,
+            AnalysisStatus,
+        )
+
+        strategy = PULLBACK_CONTINUATION
+        analysis = _rising_analysis()
+        direction = StrategyDirection.BULLISH
+
+        liquidity = LiquidityAnalysisResult(
+            status=AnalysisStatus.AVAILABLE,
+            pools=[],
+            sweeps=[],
+            nearest_buy_side_pool=None,
+            nearest_sell_side_pool=None,
+            distance_to_buy_side_pct=None,
+            distance_to_sell_side_pct=None,
+        )
+
+        results = evaluate_invalidation_rules(
+            strategy=strategy,
+            analysis=analysis,
+            direction=direction,
+            regime_state="trending_up",
+            liquidity=liquidity,
+        )
+
+        liq_results = [r for r in results if r.rule_id == "pc_liq_inval_opposing_sweep"]
+        assert len(liq_results) == 1
+        assert liq_results[0].triggered is False
+
+    def test_all_strategies_have_liquidity_invalidation_evaluators(self):
+        """All registered strategies must have their liquidity invalidation rules covered."""
+        from app.modules.strategies.invalidation import _RULE_EVALUATORS
+        for strategy in get_all_strategy_definitions():
+            for rule in strategy.liquidity_invalidation_rules:
+                assert rule.rule_id in _RULE_EVALUATORS, (
+                    f"Strategy '{strategy.strategy_id}' has liquidity rule "
+                    f"'{rule.rule_id}' but no evaluator registered"
+                )
