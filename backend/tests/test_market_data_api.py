@@ -120,7 +120,7 @@ class TestMarketDataLatest:
     def test_unsupported_instrument(self, client: TestClient) -> None:
         response = client.get(
             "/api/v1/market-data/latest",
-            params={"instrument": "BTC/USD"},
+            params={"instrument": "DOGE/USD"},
         )
         assert response.status_code == 422
 

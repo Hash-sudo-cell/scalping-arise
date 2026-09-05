@@ -66,7 +66,7 @@ class TestMarketAnalysisEndpoint:
         """Invalid instrument should return 422."""
         response = client.get(
             "/api/v1/market-analysis",
-            params={"instrument": "BTC/USD", "timeframe": "1h", "limit": 200},
+            params={"instrument": "DOGE/USD", "timeframe": "1h", "limit": 200},
         )
         assert response.status_code == 422
 

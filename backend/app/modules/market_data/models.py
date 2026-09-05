@@ -77,6 +77,12 @@ class Instrument(str, Enum):
     """Canonical internal instrument names."""
 
     XAU_USD = "XAU/USD"
+    BTC_USD = "BTC/USD"
+    ETH_USD = "ETH/USD"
+    EUR_USD = "EUR/USD"
+    GBP_USD = "GBP/USD"
+    USD_JPY = "USD/JPY"
+    US30 = "US30"
 
 
 # ---------------------------------------------------------------------------
