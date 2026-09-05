@@ -16,6 +16,7 @@ from app.api.v1.technical_features import router as technical_features_router
 from app.api.v1.strategies import router as strategies_router
 from app.api.v1.signals import router as signals_router
 from app.api.v1.trade_planning import router as trade_planning_router
+from app.api.v1.intelligence import router as intelligence_router
 
 router = APIRouter()
 
@@ -27,3 +28,4 @@ router.include_router(technical_features_router)
 router.include_router(strategies_router)
 router.include_router(signals_router)
 router.include_router(trade_planning_router)
+router.include_router(intelligence_router)
