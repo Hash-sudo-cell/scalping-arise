@@ -29,7 +29,7 @@ class SignalEngineSettings(BaseSettings):
         description="Enable the signal and confirmation engine",
     )
 
-    # --- Confidence thresholds ---
+    # --- Confidence thresholds (legacy 0.0–1.0 scale) ---
     minimum_confidence_threshold: float = Field(
         default=0.55,
         ge=0.0,
@@ -42,6 +42,21 @@ class SignalEngineSettings(BaseSettings):
         ge=0.0,
         le=1.0,
         description="Confidence score above which a signal is considered STRONG",
+    )
+
+    # --- Phase 6: 0–100 integer thresholds ---
+    confidence_threshold_0_100: int = Field(
+        default=55,
+        ge=0,
+        le=100,
+        description="Minimum confidence on 0–100 scale for signal qualification",
+    )
+
+    quality_threshold_0_100: int = Field(
+        default=60,
+        ge=0,
+        le=100,
+        description="Minimum quality on 0–100 scale for signal qualification",
     )
 
     # --- Multi-timeframe confirmation ---
@@ -84,9 +99,91 @@ class SignalEngineSettings(BaseSettings):
         description="Default number of candles per timeframe for evaluation",
     )
 
+    # --- Phase 6: Signal lifecycle ---
+    signal_ttl_seconds: int = Field(
+        default=300,
+        ge=0,
+        le=3600,
+        description="Signal time-to-live in seconds before auto-expiration",
+    )
+
+    dedup_window_seconds: int = Field(
+        default=60,
+        ge=0,
+        le=600,
+        description="Deduplication window — same signal suppressed within this period",
+    )
+
+    max_active_signals: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum number of concurrent active signals",
+    )
+
+    # --- Phase 6: Priority ranking weights ---
+    priority_confidence_weight: float = Field(
+        default=0.35,
+        ge=0.0,
+        le=1.0,
+        description="Weight of confidence in priority score",
+    )
+
+    priority_quality_weight: float = Field(
+        default=0.30,
+        ge=0.0,
+        le=1.0,
+        description="Weight of quality in priority score",
+    )
+
+    priority_evidence_weight: float = Field(
+        default=0.20,
+        ge=0.0,
+        le=1.0,
+        description="Weight of evidence strength in priority score",
+    )
+
+    priority_recency_weight: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=1.0,
+        description="Weight of recency in priority score",
+    )
+
+    # --- Phase 6: Signal history ---
+    signal_history_max_size: int = Field(
+        default=100,
+        ge=10,
+        le=1000,
+        description="Maximum number of signal records retained in history",
+    )
+
     @property
     def is_enabled(self) -> bool:
         return self.signal_engine_enabled
+
+    @property
+    def priority_weights_normalized(self) -> dict[str, float]:
+        """Return priority weights normalized to sum to 1.0."""
+        total = (
+            self.priority_confidence_weight
+            + self.priority_quality_weight
+            + self.priority_evidence_weight
+            + self.priority_recency_weight
+        )
+        if total == 0:
+            return {
+                "confidence": 0.35,
+                "quality": 0.30,
+                "evidence": 0.20,
+                "recency": 0.15,
+            }
+        return {
+            "confidence": self.priority_confidence_weight / total,
+            "quality": self.priority_quality_weight / total,
+            "evidence": self.priority_evidence_weight / total,
+            "recency": self.priority_recency_weight / total,
+        }
 
 
 def get_signal_engine_settings() -> SignalEngineSettings:

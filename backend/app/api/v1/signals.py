@@ -1,7 +1,8 @@
 """
 Scalping Arise — Signal Engine API Endpoints
 
-Minimal API surface for Phase 6 signal evaluation.
+API surface for Phase 6 signal evaluation, active signal querying,
+signal history, and manual invalidation.
 """
 
 from __future__ import annotations
@@ -109,7 +110,8 @@ async def signals_evaluate(
 
     Consumes Phase 3 (Market Analysis), Phase 4 (Technical Features),
     and Phase 5 (Strategy Evaluation) to produce a structured signal
-    evaluation result with confidence scoring and conflict resolution.
+    evaluation result with confidence scoring, quality scoring, and
+    conflict resolution. Returns BUY/SELL/NO_TRADE decision.
     """
     from app.modules.market_data.models import Instrument
 
@@ -147,7 +149,89 @@ async def signals_evaluate(
 
 
 # ---------------------------------------------------------------------------
-# Serialization helper
+# GET /api/v1/signals/active
+# ---------------------------------------------------------------------------
+
+@router.get("/signals/active")
+async def signals_active() -> dict:
+    """
+    List all currently active signals, ranked by priority.
+
+    Returns signals in ACTIVE or CONFIRMED state, ordered by
+    composite priority score (highest first).
+    """
+    service = _get_signal_service()
+    active = service.get_active_signals()
+
+    return {
+        "count": len(active),
+        "signals": [_serialize_signal_record(r) for r in active],
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/signals/history
+# ---------------------------------------------------------------------------
+
+@router.get("/signals/history")
+async def signals_history(
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum number of history entries to return",
+    ),
+) -> dict:
+    """
+    Get recent signal evaluation history.
+
+    Returns the most recent signal records in reverse chronological order.
+    """
+    service = _get_signal_service()
+    history = service.get_signal_history(limit=limit)
+
+    return {
+        "count": len(history),
+        "signals": [_serialize_signal_record(r) for r in history],
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/signals/{signal_id}/invalidate
+# ---------------------------------------------------------------------------
+
+@router.post("/signals/{signal_id}/invalidate")
+async def signals_invalidate(
+    signal_id: str,
+    reason: str = Query(
+        default="Manual invalidation",
+        description="Reason for manual invalidation",
+    ),
+) -> dict:
+    """
+    Manually invalidate a signal by ID.
+
+    Transitions the signal to INVALIDATED state and removes it
+    from deduplication tracking.
+    """
+    service = _get_signal_service()
+    success = service.invalidate_signal(signal_id, reason)
+
+    if not success:
+        return {
+            "success": False,
+            "error": f"Signal {signal_id} not found or not in a validatable state",
+        }
+
+    return {
+        "success": True,
+        "signal_id": signal_id,
+        "reason": reason,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Serialization helpers
 # ---------------------------------------------------------------------------
 
 def _serialize_signal_result(result) -> dict:
@@ -159,7 +243,25 @@ def _serialize_signal_result(result) -> dict:
         "status": result.status.value,
         "direction": result.direction.value,
         "reason": result.reason,
+        # Phase 6 fields
+        "decision": result.decision.value,
+        "signal_state": result.signal_state.value,
     }
+
+    if result.decision_reasons:
+        response["decision_reasons"] = [
+            {
+                "code": r.code.value,
+                "detail": r.detail,
+                "contributing_factors": r.contributing_factors,
+            }
+            for r in result.decision_reasons
+        ]
+
+    if result.signal_record:
+        response["signal_id"] = result.signal_record.signal_id
+        response["signal_created_at"] = result.signal_record.created_at.isoformat()
+        response["signal_ttl_seconds"] = result.signal_record.ttl_seconds
 
     if result.confidence:
         response["confidence"] = {
@@ -168,6 +270,7 @@ def _serialize_signal_result(result) -> dict:
             "mtf_confirmation": result.confidence.mtf_confirmation,
             "evidence_strength": result.confidence.evidence_strength,
             "regime_consistency": result.confidence.regime_consistency,
+            "confidence_0_100": result.confidence.confidence_0_100,
             "breakdown": [
                 {
                     "factor": b.factor,
@@ -178,6 +281,30 @@ def _serialize_signal_result(result) -> dict:
                 }
                 for b in result.confidence.breakdown
             ],
+        }
+
+    if result.quality:
+        response["quality"] = {
+            "score": result.quality.score,
+            "condition_pass_rate": result.quality.condition_pass_rate,
+            "evidence_depth": result.quality.evidence_depth,
+            "strategy_alignment": result.quality.strategy_alignment,
+            "breakdown": [
+                {
+                    "factor": b.factor,
+                    "score": b.score,
+                    "weight": b.weight,
+                    "contribution": b.contribution,
+                    "description": b.description,
+                }
+                for b in result.quality.breakdown
+            ],
+        }
+
+    if result.priority:
+        response["priority"] = {
+            "priority_score": result.priority.priority_score,
+            "rank": result.priority.rank,
         }
 
     if result.candidates:
@@ -241,3 +368,47 @@ def _serialize_signal_result(result) -> dict:
         response["timeframes_evaluated"] = result.timeframes_evaluated
 
     return response
+
+
+def _serialize_signal_record(record) -> dict:
+    """Serialize a SignalRecord to a JSON-compatible dict."""
+    result = {
+        "signal_id": record.signal_id,
+        "instrument": record.instrument,
+        "decision": record.decision.value,
+        "state": record.state.value,
+        "direction": record.direction.value,
+        "created_at": record.created_at.isoformat(),
+        "ttl_seconds": record.ttl_seconds,
+        "reason": record.reason,
+    }
+
+    if record.confidence:
+        result["confidence_0_100"] = record.confidence.confidence_0_100
+
+    if record.quality:
+        result["quality_score"] = record.quality.score
+
+    if record.priority:
+        result["priority_score"] = record.priority.priority_score
+        result["rank"] = record.priority.rank
+
+    if record.reasons:
+        result["reasons"] = [
+            {"code": r.code.value, "detail": r.detail}
+            for r in record.reasons
+        ]
+
+    # State timestamps
+    if record.qualified_at:
+        result["qualified_at"] = record.qualified_at.isoformat()
+    if record.confirmed_at:
+        result["confirmed_at"] = record.confirmed_at.isoformat()
+    if record.activated_at:
+        result["activated_at"] = record.activated_at.isoformat()
+    if record.expired_at:
+        result["expired_at"] = record.expired_at.isoformat()
+    if record.invalidated_at:
+        result["invalidated_at"] = record.invalidated_at.isoformat()
+
+    return result
