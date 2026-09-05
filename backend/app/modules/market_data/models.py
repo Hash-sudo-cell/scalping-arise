@@ -113,6 +113,27 @@ class SourceType(str, Enum):
 
     SPOT = "spot"
     FUTURES_PROXY = "futures_proxy"
+    LIVE = "live"          # Live streaming source (OANDA primary)
+    VERIFIED = "verified"   # Verified via secondary source (TradingView)
+
+
+class ConnectionState(str, Enum):
+    """Live stream connection health state."""
+
+    DISCONNECTED = "disconnected"
+    CONNECTING = "connecting"
+    CONNECTED = "connected"
+    RECONNECTING = "reconnecting"
+    STALE = "stale"
+    DEGRADED = "degraded"
+
+
+class CandleState(str, Enum):
+    """Lifecycle state of a live candle."""
+
+    FORMING = "forming"
+    CLOSED = "closed"
+    EXPIRED = "expired"
 
 
 # ---------------------------------------------------------------------------
@@ -254,3 +275,59 @@ class MarketDataHealthResponse(BaseModel):
     fallback: Optional[ProviderHealth] = None
     active_source: Optional[str] = None
     last_data_timestamp: Optional[datetime] = None
+
+
+# ---------------------------------------------------------------------------
+# Live streaming models
+# ---------------------------------------------------------------------------
+
+class LiveCandleState(BaseModel):
+    """Tracks the lifecycle of a forming/live candle per timeframe."""
+
+    instrument: Instrument
+    timeframe: Timeframe
+    state: CandleState = CandleState.FORMING
+    candle: Optional[NormalizedCandle] = None
+    last_update: Optional[datetime] = None
+    source: str = "oanda"
+
+    @property
+    def is_fresh(self) -> bool:
+        """Check if the forming candle has been updated recently."""
+        if self.last_update is None:
+            return False
+        now = datetime.now(timezone.utc)
+        age = (now - self.last_update).total_seconds()
+        return age < self.timeframe.interval_seconds * 1.5
+
+
+class LivePriceState(BaseModel):
+    """Tracks the latest live price from OANDA and optional TV verification."""
+
+    instrument: Instrument
+    price: float = 0.0
+    bid: Optional[float] = None
+    ask: Optional[float] = None
+    spread: Optional[float] = None
+    timestamp: Optional[datetime] = None
+    source: str = "oanda"
+    # TradingView verification
+    tv_price: Optional[float] = None
+    tv_timestamp: Optional[datetime] = None
+    price_divergence_pct: Optional[float] = None
+    is_verified: bool = False
+
+
+class LiveStreamStatus(BaseModel):
+    """Current status of the live streaming subsystem."""
+
+    connection_state: ConnectionState = ConnectionState.DISCONNECTED
+    oanda_connected: bool = False
+    tv_connected: bool = False
+    active_timeframes: list[str] = []
+    last_price: Optional[LivePriceState] = None
+    candle_states: dict[str, str] = {}  # timeframe -> CandleState
+    reconnect_attempts: int = 0
+    last_error: Optional[str] = None
+    started_at: Optional[datetime] = None
+    last_data_at: Optional[datetime] = None

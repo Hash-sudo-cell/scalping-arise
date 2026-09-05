@@ -114,9 +114,85 @@ class MarketDataSettings(BaseSettings):
         description="yfinance ticker for XAU/USD (Gold Futures)",
     )
 
+    # --- OANDA V20 ---
+    oanda_account_id: str = Field(
+        default="",
+        description="OANDA V20 account ID (e.g. 101-001-12345678-001)",
+    )
+    oanda_api_token: str = Field(
+        default="",
+        description="OANDA V20 API token (practice or live)",
+    )
+    oanda_environment: str = Field(
+        default="practice",
+        description="OANDA environment: 'practice' or 'live'",
+    )
+    oanda_instrument: str = Field(
+        default="XAU_USD",
+        description="OANDA instrument name (uses underscores)",
+    )
+
+    # --- TradingView (tvDatafeed) ---
+    tv_username: str = Field(
+        default="",
+        description="TradingView username (for tvDatafeed auth, optional for guest)",
+    )
+    tv_password: str = Field(
+        default="",
+        description="TradingView password (for tvDatafeed auth)",
+    )
+    tv_symbol: str = Field(
+        default="OANDA:XAUUSD",
+        description="TradingView symbol for XAU/USD",
+    )
+
+    # --- Live streaming ---
+    live_enabled: bool = Field(
+        default=False,
+        description="Enable live streaming (requires OANDA credentials)",
+    )
+    live_stream_timeframes: list[str] = Field(
+        default=["1m", "5m", "15m"],
+        description="Timeframes to maintain in live state",
+    )
+    live_stale_threshold_seconds: int = Field(
+        default=30,
+        description="Seconds without data before stream is considered stale",
+    )
+    live_reconnect_max_attempts: int = Field(
+        default=10,
+        description="Maximum reconnection attempts before giving up",
+    )
+    live_reconnect_base_delay: float = Field(
+        default=1.0,
+        description="Base delay between reconnection attempts (exponential backoff)",
+    )
+    live_reconnect_max_delay: float = Field(
+        default=60.0,
+        description="Maximum delay between reconnection attempts",
+    )
+    live_price_verification_tolerance_pct: float = Field(
+        default=0.3,
+        description="Max allowed price difference (%) between OANDA and TradingView for verification",
+    )
+
     @property
     def freshness_map(self) -> dict[str, int]:
         return self.freshness_tolerance_seconds
+
+    @property
+    def oanda_rest_url(self) -> str:
+        """OANDA REST API base URL based on environment."""
+        if self.oanda_environment == "live":
+            return "https://api-fxtrade.oanda.com/v3"
+        return "https://api-fxpractice.oanda.com/v3"
+
+    @property
+    def oanda_stream_url(self) -> str:
+        """OANDA streaming API base URL based on environment."""
+        if self.oanda_environment == "live":
+            return "https://stream-fxtrade.oanda.com/v3"
+        return "https://stream-fxpractice.oanda.com/v3"
 
 
 def get_market_data_settings() -> MarketDataSettings:

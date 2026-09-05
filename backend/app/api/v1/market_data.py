@@ -155,3 +155,92 @@ async def market_data_capabilities() -> dict:
     """
     service = _get_service()
     return service.get_capabilities()
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/market-data/live/status
+# ---------------------------------------------------------------------------
+
+@router.get("/market-data/live/status")
+async def market_data_live_status() -> dict:
+    """
+    Get live streaming status.
+
+    Reports connection state, active timeframes, price verification,
+    and reconnection status. Returns 503 if live streaming is disabled.
+    """
+    service = _get_service()
+    status = service.get_live_status()
+
+    if status is None:
+        return {
+            "enabled": False,
+            "connection_state": "disconnected",
+            "message": "Live streaming not enabled or not started",
+        }
+
+    return status
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/market-data/live/price
+# ---------------------------------------------------------------------------
+
+@router.get("/market-data/live/price")
+async def market_data_live_price() -> dict:
+    """
+    Get the current live price from OANDA with TradingView verification.
+
+    Returns bid/ask/spread, TV divergence, and verification status.
+    """
+    service = _get_service()
+    price = service.get_live_price()
+
+    if price is None:
+        raise NotFoundError(
+            message="Live price unavailable",
+            details={"reason": "Live streaming not active"},
+        )
+
+    return price.model_dump(mode="json")
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/market-data/live/candle
+# ---------------------------------------------------------------------------
+
+@router.get("/market-data/live/candle")
+async def market_data_live_candle(
+    timeframe: str = Query(
+        default="1m",
+        description="Timeframe for the forming candle",
+    ),
+) -> dict:
+    """
+    Get the current forming candle for a timeframe.
+
+    Returns the live forming candle with its current OHLCV state.
+    """
+    try:
+        tf = Timeframe(timeframe)
+    except ValueError:
+        allowed = [t.value for t in Timeframe]
+        raise ValidationError(
+            message=f"Unsupported timeframe: {timeframe}",
+            details={"allowed": allowed},
+        )
+
+    service = _get_service()
+    candle = service.get_live_forming_candle(tf)
+
+    if candle is None:
+        return {
+            "timeframe": tf.value,
+            "candle": None,
+            "message": "No forming candle available",
+        }
+
+    return {
+        "timeframe": tf.value,
+        "candle": candle.model_dump(mode="json"),
+    }

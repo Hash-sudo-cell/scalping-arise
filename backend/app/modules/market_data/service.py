@@ -6,12 +6,16 @@ through this service, never directly from provider adapters.
 
 Flow:
     Request → Validation → Cache check → Provider selection → Fetch → Normalize → Validate → Cache → Response
+
+Live streaming:
+    When live_enabled=True, the service integrates with LiveStreamManager
+    for real-time OANDA data with TradingView verification.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Callable, Optional
 
 from app.modules.market_data.cache import CandleCache
 from app.modules.market_data.config import MarketDataSettings, get_market_data_settings
@@ -20,6 +24,7 @@ from app.modules.market_data.models import (
     CandlesResponse,
     Instrument,
     LatestPrice,
+    LivePriceState,
     MarketDataHealthResponse,
     NormalizedCandle,
     ProviderHealth,
@@ -41,12 +46,24 @@ from app.modules.market_data.validation import (
 
 logger = logging.getLogger(__name__)
 
+# Lazy import to avoid circular imports
+_live_stream_manager = None
+
+
+def _get_live_stream_manager():
+    """Lazy import of LiveStreamManager."""
+    global _live_stream_manager
+    if _live_stream_manager is None:
+        from app.modules.market_data.live.stream_manager import LiveStreamManager
+        _live_stream_manager = LiveStreamManager
+    return _live_stream_manager
+
 
 class MarketDataService:
     """
     Central market data service.
 
-    Manages providers, validation, caching, and failover.
+    Manages providers, validation, caching, failover, and live streaming.
     """
 
     def __init__(self, settings: Optional[MarketDataSettings] = None) -> None:
@@ -62,6 +79,9 @@ class MarketDataService:
         self._primary: MarketDataProvider = self._create_primary_provider()
         self._fallback: MarketDataProvider = self._create_fallback_provider()
         self._active_source: Optional[str] = None
+
+        # Live streaming (initialized lazily via start_live_stream)
+        self._live_manager = None
 
     def _create_primary_provider(self) -> MarketDataProvider:
         """Create the primary provider based on config."""
@@ -291,6 +311,78 @@ class MarketDataService:
         }
 
     async def close(self) -> None:
-        """Clean up provider resources."""
+        """Clean up provider resources and live streaming."""
+        if self._live_manager and self._live_manager.is_running:
+            await self._live_manager.stop()
         if hasattr(self._primary, "close"):
             await self._primary.close()
+
+    # -------------------------------------------------------------------------
+    # Live streaming integration
+    # -------------------------------------------------------------------------
+
+    async def start_live_stream(
+        self,
+        on_price_update: Optional[Callable[[LivePriceState], None]] = None,
+        on_candle_closed: Optional[Callable[[NormalizedCandle], None]] = None,
+    ) -> None:
+        """Start live streaming via LiveStreamManager."""
+        if not self._settings.live_enabled:
+            logger.info("Live streaming disabled via config")
+            return
+
+        if self._live_manager and self._live_manager.is_running:
+            logger.warning("Live stream already running")
+            return
+
+        LiveStreamManager = _get_live_stream_manager()
+        self._live_manager = LiveStreamManager(
+            settings=self._settings,
+            on_price_update=on_price_update,
+            on_candle_closed=self._on_live_candle_closed,
+        )
+
+        # Store external callbacks for candle-closed events
+        self._external_on_candle_closed = on_candle_closed
+
+        await self._live_manager.start()
+        logger.info("Live streaming started")
+
+    async def stop_live_stream(self) -> None:
+        """Stop live streaming."""
+        if self._live_manager and self._live_manager.is_running:
+            await self._live_manager.stop()
+            self._live_manager = None
+            logger.info("Live streaming stopped")
+
+    def _on_live_candle_closed(self, candle: NormalizedCandle) -> None:
+        """Handle a closed candle from the live stream."""
+        # Push to cache for downstream consumers
+        self._cache.update_candle(candle)
+
+        # Forward to external callback if registered
+        if hasattr(self, "_external_on_candle_closed") and self._external_on_candle_closed:
+            self._external_on_candle_closed(candle)
+
+    def get_live_price(self) -> Optional[LivePriceState]:
+        """Get the current live price state."""
+        if self._live_manager is None:
+            return None
+        return self._live_manager.price_state
+
+    def get_live_forming_candle(self, timeframe: Timeframe) -> Optional[NormalizedCandle]:
+        """Get the current forming candle for a timeframe."""
+        if self._live_manager is None:
+            return None
+        return self._live_manager.get_forming_candle(timeframe)
+
+    def get_live_status(self) -> Optional[dict]:
+        """Get live stream status."""
+        if self._live_manager is None:
+            return None
+        return self._live_manager.get_status().model_dump(mode="json")
+
+    @property
+    def live_streaming(self) -> bool:
+        """Whether live streaming is active."""
+        return self._live_manager is not None and self._live_manager.is_running

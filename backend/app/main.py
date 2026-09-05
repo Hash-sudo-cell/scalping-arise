@@ -22,10 +22,14 @@ from app.core.logging import setup_logging
 
 logger = logging.getLogger(__name__)
 
+# Lazy reference to the market data service for live streaming lifecycle
+_market_data_service = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: startup and shutdown events."""
+    global _market_data_service
     settings = get_settings()
     logger.info(
         "Starting %s v%s | environment=%s | debug=%s",
@@ -42,7 +46,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     logger.info("API prefix: %s", settings.api_prefix)
 
+    # Start live streaming if enabled
+    if settings.environment != Environment.TESTING:
+        try:
+            from app.modules.market_data.config import get_market_data_settings
+            md_settings = get_market_data_settings()
+            if md_settings.live_enabled:
+                from app.modules.market_data.service import MarketDataService
+                _market_data_service = MarketDataService(settings=md_settings)
+                await _market_data_service.start_live_stream()
+                logger.info("Live streaming started via lifespan")
+        except Exception as e:
+            logger.warning("Failed to start live streaming: %s", e)
+
     yield
+
+    # Shutdown live streaming
+    if _market_data_service is not None:
+        try:
+            await _market_data_service.stop_live_stream()
+            await _market_data_service.close()
+            logger.info("Live streaming stopped via lifespan")
+        except Exception as e:
+            logger.warning("Error stopping live streaming: %s", e)
 
     logger.info("Shutting down %s", settings.app_name)
 
