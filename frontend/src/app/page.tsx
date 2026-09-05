@@ -5,6 +5,7 @@ import TechnicalFeaturesStatus from "@/components/TechnicalFeaturesStatus";
 import StrategyEvaluationStatus from "@/components/StrategyEvaluationStatus";
 import SignalEvaluationStatus from "@/components/SignalEvaluationStatus";
 import IntelligenceStatus from "@/components/IntelligenceStatus";
+import BacktestStatus from "@/components/BacktestStatus";
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Scalping Arise";
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0";
@@ -20,8 +21,8 @@ export default function Home() {
       </div>
 
       <div className="home-badges">
-        <div className="info-badge">Phase 8</div>
-        <div className="info-badge">Intelligence Engine</div>
+        <div className="info-badge">Phase 9</div>
+        <div className="info-badge">Backtesting Engine</div>
         <div className="info-badge">v{APP_VERSION}</div>
       </div>
 
@@ -32,6 +33,7 @@ export default function Home() {
       <StrategyEvaluationStatus />
       <SignalEvaluationStatus />
       <IntelligenceStatus instrument="XAU/USD" strategyId="default" />
+      <BacktestStatus />
 
       <footer className="home-footer">
         <span>Intelligence Engine</span>
