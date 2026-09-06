@@ -18,6 +18,7 @@ from app.api.v1.signals import router as signals_router
 from app.api.v1.trade_planning import router as trade_planning_router
 from app.api.v1.intelligence import router as intelligence_router
 from app.api.v1.backtesting import router as backtesting_router
+from app.api.v1.decision import router as decision_router
 
 router = APIRouter()
 
@@ -31,3 +32,4 @@ router.include_router(signals_router)
 router.include_router(trade_planning_router)
 router.include_router(intelligence_router)
 router.include_router(backtesting_router)
+router.include_router(decision_router)

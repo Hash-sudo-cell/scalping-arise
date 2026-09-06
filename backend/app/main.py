@@ -59,6 +59,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as e:
             logger.warning("Failed to start live streaming: %s", e)
 
+    # Initialize decision engine emergency state
+    if settings.environment != Environment.TESTING:
+        try:
+            from app.modules.decision.config import get_decision_engine_settings
+            decision_settings = get_decision_engine_settings()
+            if decision_settings.emergency_disable:
+                logger.warning("DECISION ENGINE: Emergency disable is ACTIVE on startup")
+        except Exception as e:
+            logger.warning("Failed to check decision engine config: %s", e)
+
     yield
 
     # Shutdown live streaming
