@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useInstrument } from "@/contexts/InstrumentContext";
 import {
   generateTradePlan,
   fetchTradePlanningHealth,
@@ -11,6 +12,7 @@ import {
 type Status = "loading" | "ok" | "error" | "no_trade" | "rejected";
 
 export default function TradePlanStatus() {
+  const { instrument } = useInstrument();
   const [plan, setPlan] = useState<TradePlan | null>(null);
   const [health, setHealth] = useState<TradePlanningHealthResponse | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -28,7 +30,7 @@ export default function TradePlanStatus() {
 
       // Generate a plan from the latest signal
       const pRes = await generateTradePlan({
-        instrument: "XAU/USD",
+        instrument: instrument,
         timeframes: ["1m", "5m", "15m"],
         limit: 300,
       });
@@ -52,7 +54,7 @@ export default function TradePlanStatus() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [instrument]);
 
   const stateColor = (s: string) =>
     s === "approved"

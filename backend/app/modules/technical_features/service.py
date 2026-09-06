@@ -55,6 +55,7 @@ class TechnicalFeatureService:
         self,
         timeframe: str = "1h",
         limit: int = 300,
+        instrument: str = "XAU/USD",
     ) -> FeatureResult:
         """
         Calculate all technical features for the given timeframe.
@@ -62,16 +63,22 @@ class TechnicalFeatureService:
         Args:
             timeframe: Candle timeframe.
             limit: Number of candles to request.
+            instrument: Instrument to analyze (e.g. XAU/USD, EUR/USD).
 
         Returns:
             FeatureResult with all features and availability status.
         """
+        from app.modules.market_data.models import Instrument as InstrumentEnum, Timeframe as TimeframeEnum
+
         cfg = self._settings
 
         # Fetch candles from Phase 2
         try:
-            candles_response = await self._market_data_service.get_candles(
-                timeframe=timeframe,
+            inst_enum = InstrumentEnum(instrument)
+            tf_enum = TimeframeEnum(timeframe)
+            candles_response = await self._market_data_service.fetch_candles(
+                instrument=inst_enum,
+                timeframe=tf_enum,
                 limit=limit,
             )
         except Exception as e:
@@ -288,6 +295,7 @@ class TechnicalFeatureService:
         self,
         timeframes: list[str],
         limit: int = 300,
+        instrument: str = "XAU/USD",
     ) -> MultiTimeframeResult:
         """
         Calculate technical features for multiple timeframes independently.
@@ -298,6 +306,7 @@ class TechnicalFeatureService:
         Args:
             timeframes: List of timeframe strings (e.g. ["1m", "5m", "15m"]).
             limit: Number of candles per timeframe.
+            instrument: Instrument to analyze (e.g. XAU/USD, EUR/USD).
 
         Returns:
             MultiTimeframeResult with per-timeframe FeatureResult objects.
@@ -307,7 +316,7 @@ class TechnicalFeatureService:
 
         for tf in timeframes:
             try:
-                result = await self.get_features(timeframe=tf, limit=limit)
+                result = await self.get_features(timeframe=tf, limit=limit, instrument=instrument)
                 results.append(TimeframeFeatureResult(timeframe=tf, result=result))
                 if result.warnings:
                     all_warnings.extend(

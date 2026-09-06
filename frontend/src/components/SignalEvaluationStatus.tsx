@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useInstrument } from "@/contexts/InstrumentContext";
 import {
   fetchSignalsEvaluate,
   type SignalEvaluationResponse,
@@ -9,6 +10,7 @@ import {
 type Status = "loading" | "ok" | "error";
 
 export default function SignalEvaluationStatus() {
+  const { instrument } = useInstrument();
   const [data, setData] = useState<SignalEvaluationResponse | null>(null);
   const [status, setStatus] = useState<Status>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +19,7 @@ export default function SignalEvaluationStatus() {
     let cancelled = false;
 
     async function load() {
-      const res = await fetchSignalsEvaluate("XAU/USD", ["1m", "5m", "15m"], 300);
+      const res = await fetchSignalsEvaluate(instrument, ["1m", "5m", "15m"], 300);
       if (cancelled) return;
 
       if (res.ok && res.data) {
@@ -31,7 +33,7 @@ export default function SignalEvaluationStatus() {
 
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [instrument]);
 
   const statusColor = (s: string) =>
     s === "qualified" ? "var(--color-accent)" :

@@ -189,9 +189,15 @@ async function featuresFetch<T>(
 export async function fetchTechnicalFeatures(
   timeframe: string = "1h",
   limit: number = 300,
+  instrument?: string,
 ) {
+  const params = new URLSearchParams({
+    timeframe,
+    limit: String(limit),
+  });
+  if (instrument) params.set("instrument", instrument);
   return featuresFetch<TechnicalFeaturesResponse>(
-    `/api/v1/technical-features?timeframe=${encodeURIComponent(timeframe)}&limit=${limit}`,
+    `/api/v1/technical-features?${params.toString()}`,
   );
 }
 
@@ -219,9 +225,14 @@ export async function fetchTechnicalFeaturesCapabilities() {
 export async function fetchMultiTimeframeFeatures(
   timeframes: string[] = ["1m", "5m", "15m"],
   limit: number = 300,
+  instrument?: string,
 ) {
-  const tfParam = timeframes.join(",");
+  const params = new URLSearchParams({
+    timeframes: timeframes.join(","),
+    limit: String(limit),
+  });
+  if (instrument) params.set("instrument", instrument);
   return featuresFetch<MultiTimeframeResponse>(
-    `/api/v1/technical-features/multi-timeframe?timeframes=${encodeURIComponent(tfParam)}&limit=${limit}`,
+    `/api/v1/technical-features/multi-timeframe?${params.toString()}`,
   );
 }

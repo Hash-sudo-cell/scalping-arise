@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useInstrument } from "@/contexts/InstrumentContext";
 import {
   fetchTechnicalFeatures,
   type TechnicalFeaturesResponse,
@@ -9,6 +10,7 @@ import {
 type Status = "loading" | "ok" | "error";
 
 export default function TechnicalFeaturesStatus() {
+  const { instrument } = useInstrument();
   const [features, setFeatures] = useState<TechnicalFeaturesResponse | null>(null);
   const [status, setStatus] = useState<Status>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +19,7 @@ export default function TechnicalFeaturesStatus() {
     let cancelled = false;
 
     async function load() {
-      const res = await fetchTechnicalFeatures("1h", 300);
+      const res = await fetchTechnicalFeatures("1h", 300, instrument);
       if (cancelled) return;
 
       if (res.ok && res.data) {
@@ -31,7 +33,7 @@ export default function TechnicalFeaturesStatus() {
 
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [instrument]);
 
   const featureSetStatusColor = (s: string) =>
     s === "ready" ? "var(--color-accent)" :

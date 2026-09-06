@@ -455,7 +455,7 @@ class TestServicePartialAvailability:
             has_gaps=False,
             candles=candles,
         )
-        service.get_candles = AsyncMock(return_value=response)
+        service.fetch_candles = AsyncMock(return_value=response)
         return service
 
     @pytest.mark.asyncio
@@ -1075,7 +1075,7 @@ class TestTechnicalFeatureService:
             has_gaps=False,
             candles=candles,
         )
-        service.get_candles = AsyncMock(return_value=response)
+        service.fetch_candles = AsyncMock(return_value=response)
         return service
 
     @pytest.fixture
@@ -1094,7 +1094,7 @@ class TestTechnicalFeatureService:
             has_gaps=False,
             candles=candles,
         )
-        service.get_candles = AsyncMock(return_value=response)
+        service.fetch_candles = AsyncMock(return_value=response)
         return service
 
     @pytest.mark.asyncio
@@ -1386,7 +1386,7 @@ class TestServiceVolatilityClassification:
             has_gaps=False,
             candles=candles,
         )
-        service.get_candles = AsyncMock(return_value=response)
+        service.fetch_candles = AsyncMock(return_value=response)
         return service
 
     @pytest.mark.asyncio
@@ -1420,7 +1420,7 @@ class TestMultiTimeframe:
 
         service = MagicMock()
 
-        async def get_candles_side_effect(timeframe="1h", limit=300):
+        async def get_candles_side_effect(timeframe="1h", limit=300, **kwargs):
             if timeframe in ("1m", "5m", "15m"):
                 candles = _rising_candles(100)
             else:
@@ -1435,7 +1435,7 @@ class TestMultiTimeframe:
                 candles=candles,
             )
 
-        service.get_candles = AsyncMock(side_effect=get_candles_side_effect)
+        service.fetch_candles = AsyncMock(side_effect=get_candles_side_effect)
         return service
 
     @pytest.mark.asyncio
@@ -1479,7 +1479,7 @@ class TestMultiTimeframe:
         service = MagicMock()
         call_count = {"n": 0}
 
-        async def get_candles_side_effect(timeframe="1h", limit=300):
+        async def get_candles_side_effect(timeframe="1h", limit=300, **kwargs):
             call_count["n"] += 1
             if timeframe == "5m":
                 raise RuntimeError("Simulated provider error")
@@ -1494,7 +1494,7 @@ class TestMultiTimeframe:
                 candles=candles,
             )
 
-        service.get_candles = AsyncMock(side_effect=get_candles_side_effect)
+        service.fetch_candles = AsyncMock(side_effect=get_candles_side_effect)
         from app.modules.technical_features.service import TechnicalFeatureService
         svc = TechnicalFeatureService(market_data_service=service)
         result = await svc.get_features_multi_timeframe(

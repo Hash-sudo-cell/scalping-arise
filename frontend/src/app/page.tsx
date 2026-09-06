@@ -1,5 +1,6 @@
 import HealthStatus from "@/components/HealthStatus";
 import MarketDataStatus from "@/components/MarketDataStatus";
+import InstrumentSelector from "@/components/InstrumentSelector";
 import MarketAnalysisStatus from "@/components/MarketAnalysisStatus";
 import TechnicalFeaturesStatus from "@/components/TechnicalFeaturesStatus";
 import StrategyEvaluationStatus from "@/components/StrategyEvaluationStatus";
@@ -8,6 +9,7 @@ import IntelligenceStatus from "@/components/IntelligenceStatus";
 import TradePlanStatus from "@/components/TradePlanStatus";
 import BacktestStatus from "@/components/BacktestStatus";
 import DecisionStatus from "@/components/DecisionStatus";
+import InstrumentAwareIntelligenceStatus from "@/components/InstrumentAwareIntelligenceStatus";
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Scalping Arise";
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0";
@@ -18,7 +20,7 @@ export default function Home() {
       <div className="home-hero">
         <h1 className="home-title">{APP_NAME}</h1>
         <p className="home-subtitle">
-          XAU/USD Multi-Timeframe Scalping Signal Intelligence
+          Multi-Timeframe Scalping Signal Intelligence
         </p>
       </div>
 
@@ -26,6 +28,7 @@ export default function Home() {
         <div className="info-badge">Phase 10</div>
         <div className="info-badge">Decision Engine</div>
         <div className="info-badge">v{APP_VERSION}</div>
+        <InstrumentSelector />
       </div>
 
       <HealthStatus />
@@ -35,7 +38,7 @@ export default function Home() {
       <StrategyEvaluationStatus />
       <SignalEvaluationStatus />
       <TradePlanStatus />
-      <IntelligenceStatus instrument="XAU/USD" strategyId="default" />
+      <InstrumentAwareIntelligenceStatus />
       <BacktestStatus />
       <DecisionStatus />
 

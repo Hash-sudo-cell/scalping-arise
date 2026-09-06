@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useInstrument } from "@/contexts/InstrumentContext";
 import {
   fetchMarketAnalysis,
   type MarketAnalysisResponse,
@@ -9,6 +10,7 @@ import {
 type Status = "loading" | "ok" | "error";
 
 export default function MarketAnalysisStatus() {
+  const { instrument } = useInstrument();
   const [analysis, setAnalysis] = useState<MarketAnalysisResponse | null>(null);
   const [status, setStatus] = useState<Status>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +19,7 @@ export default function MarketAnalysisStatus() {
     let cancelled = false;
 
     async function load() {
-      const res = await fetchMarketAnalysis("XAU/USD", "1h", 200);
+      const res = await fetchMarketAnalysis(instrument, "1h", 200);
       if (cancelled) return;
 
       if (res.ok && res.data) {
@@ -31,7 +33,7 @@ export default function MarketAnalysisStatus() {
 
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [instrument]);
 
   const statusColor = (s: string) =>
     s === "available" ? "var(--color-accent)" :

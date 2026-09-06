@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import { InstrumentProvider } from "@/contexts/InstrumentContext";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Scalping Arise",
   description:
-    "XAU/USD Multi-Timeframe, Multi-Strategy Scalping Signal Intelligence System",
+    "Multi-Timeframe, Multi-Strategy Scalping Signal Intelligence System",
 };
 
 export default function RootLayout({
@@ -14,7 +15,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <InstrumentProvider>{children}</InstrumentProvider>
+      </body>
     </html>
   );
 }

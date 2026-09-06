@@ -79,11 +79,12 @@ class HistoricalDataProvider:
         inst = Instrument(instrument)
         tf = Timeframe(timeframe)
 
-        raw_candles = await self._market_data.get_candles(
+        raw_response = await self._market_data.fetch_candles(
             instrument=inst,
             timeframe=tf,
             limit=limit,
         )
+        raw_candles = raw_response.candles
 
         # Convert to HistoricalCandle
         candles: list[HistoricalCandle] = []

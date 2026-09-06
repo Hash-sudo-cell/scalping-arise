@@ -5,6 +5,11 @@ Main orchestration engine for backtesting.
 Ties together all Phase 9 components:
 history loading, candle replay, signal generation, trade simulation,
 account simulation, and performance analytics.
+
+HISTORICAL DATA ISOLATION:
+  All signal generation and trade planning during backtesting uses
+  ReplayMarketDataService — never live market data providers.
+  The simulated clock controls data visibility at every candle.
 """
 
 from __future__ import annotations
@@ -41,8 +46,10 @@ from app.modules.backtesting.models import (
 )
 from app.modules.backtesting.performance_analytics import PerformanceAnalytics
 from app.modules.backtesting.portfolio_simulator import PortfolioSimulator
+from app.modules.backtesting.replay_market_data_provider import ReplayMarketDataProvider
+from app.modules.backtesting.replay_market_data_service import ReplayMarketDataService
 from app.modules.backtesting.trade_simulator import TradeSimulator
-from app.modules.market_data.models import Instrument, Timeframe
+from app.modules.market_data.models import Instrument, NormalizedCandle, SourceType, Timeframe
 
 logger = logging.getLogger(__name__)
 
@@ -54,16 +61,14 @@ class BacktestRunner:
     Executes a complete backtest:
     1. Load historical data
     2. Validate data quality
-    3. Set up look-ahead protection
-    4. Initialize simulators
-    5. Replay candles chronologically
-    6. At each candle: check exits, evaluate signals, generate plans, execute trades
-    7. Compute performance analytics
-    8. Return complete result
-
-    This is a thin orchestrator — it does NOT duplicate Phase 2-8 logic.
-    Signal generation and trade planning are delegated to the existing services
-    via adapter patterns.
+    3. Set up replay data provider (ISOLATED from live)
+    4. Set up look-ahead protection
+    5. Initialize simulators
+    6. Initialize signal & planning services with replay data
+    7. Replay candles chronologically
+    8. At each candle: advance clock, check exits, evaluate signals, generate plans, execute trades
+    9. Compute performance analytics
+    10. Return complete result
     """
 
     def __init__(
@@ -119,7 +124,14 @@ class BacktestRunner:
                 result.error_message = "No valid candles in dataset"
                 return result
 
-            # Step 3: Set up simulators
+            # Step 3: Set up REPLAY data provider — ISOLATED from live data
+            replay_provider, replay_service = self._create_replay_services(
+                candles=candles,
+                instrument=config.instrument,
+                timeframe=config.timeframe,
+            )
+
+            # Step 4: Set up simulators
             account_config = AccountConfig(
                 initial_balance=config.account.initial_balance,
                 max_positions=config.account.max_positions,
@@ -143,7 +155,7 @@ class BacktestRunner:
                 settings=self._settings,
             )
 
-            # Step 4: Set up look-ahead guard
+            # Step 5: Set up look-ahead guard
             guard = LookAheadGuard(
                 simulation_time=candles[0].timestamp,
                 strict_mode=config.look_ahead_strict,
@@ -151,13 +163,21 @@ class BacktestRunner:
                 settings=self._settings,
             )
 
-            # Step 5: Replay loop
+            # Step 6: Initialize signal & planning services with REPLAY data
+            # Created ONCE — state persists across candle iterations
+            signal_service = self._create_signal_service(replay_service)
+            planning_service = self._create_planning_service(replay_service)
+
+            # Step 7: Replay loop
             max_trades = config.max_trades or self._settings.max_trades_per_backtest
             trades_executed = 0
 
             for i, candle in enumerate(candles):
                 # Advance guard
                 guard.advance(candle.timestamp)
+
+                # CRITICAL: Advance replay clock — controls data visibility
+                replay_service.set_current_time(candle.timestamp)
 
                 # Check daily reset
                 account.check_daily_reset(candle.timestamp)
@@ -205,14 +225,15 @@ class BacktestRunner:
                     portfolio.open_position(position)
 
                 # Signal generation and trade planning
-                # This is the thin adapter: we delegate to existing services
-                # but inject historical data via the guard
+                # Uses REPLAY data services — never live data
                 if trades_executed < max_trades:
                     signal, plan = await self._evaluate_at_candle(
                         candle=candle,
                         candles=candles,
                         guard=guard,
                         config=config,
+                        signal_service=signal_service,
+                        planning_service=planning_service,
                     )
 
                     if signal is not None and plan is not None:
@@ -246,7 +267,7 @@ class BacktestRunner:
                         else:
                             pass  # No trade executed at this bar
 
-            # Step 6: Close remaining open positions
+            # Step 8: Close remaining open positions
             if candles:
                 closing_trades = portfolio.close_all_positions(
                     candles[-1],
@@ -255,7 +276,7 @@ class BacktestRunner:
                 for trade in closing_trades:
                     account.process_close(trade, candles[-1].timestamp, [])
 
-            # Step 7: Compute performance analytics
+            # Step 9: Compute performance analytics
             from app.modules.backtesting.models import EquityCurve
             final_balance = account.balance
             test_duration = 0.0
@@ -272,7 +293,7 @@ class BacktestRunner:
             )
             result.metrics = analytics.compute_all()
 
-            # Step 8: Collect results
+            # Step 10: Collect results
             result.trades = portfolio.closed_trades
             result.equity_curve = account.equity_curve
             result.account_snapshots = account.snapshots
@@ -300,18 +321,109 @@ class BacktestRunner:
 
         return result
 
+    # ------------------------------------------------------------------
+    # Replay service setup
+    # ------------------------------------------------------------------
+
+    def _create_replay_services(
+        self,
+        candles: list[HistoricalCandle],
+        instrument: str,
+        timeframe: str,
+    ) -> tuple[ReplayMarketDataProvider, ReplayMarketDataService]:
+        """
+        Create isolated replay data provider and service from historical candles.
+
+        The provider holds all historical data. The service wraps it with the
+        same interface as MarketDataService so downstream services work unchanged.
+        """
+        provider = ReplayMarketDataProvider()
+        inst = Instrument(instrument)
+        tf = Timeframe(timeframe)
+
+        # Convert HistoricalCandle → NormalizedCandle for the provider
+        normalized = []
+        for c in candles:
+            nc = NormalizedCandle(
+                timestamp=c.timestamp,
+                open=c.open,
+                high=c.high,
+                low=c.low,
+                close=c.close,
+                volume=c.volume,
+                instrument=inst,
+                timeframe=tf,
+                source="backtest_historical",
+                source_type=SourceType.SPOT,
+                provider_instrument=inst.value,
+            )
+            normalized.append(nc)
+
+        provider.load_data(inst, tf, normalized)
+
+        # Set initial replay time to first candle
+        if candles:
+            provider.set_current_time(candles[0].timestamp)
+
+        service = ReplayMarketDataService(provider)
+        return provider, service
+
+    def _create_signal_service(self, replay_service: ReplayMarketDataService):
+        """
+        Create SignalEngineService using REPLAY data — never live data.
+
+        All Phase 3-5 services are wired to the replay service.
+        """
+        from app.modules.market_analysis.service import MarketAnalysisService
+        from app.modules.signal_engine.service import SignalEngineService
+        from app.modules.strategies.service import StrategyEvaluationService
+        from app.modules.technical_features.service import TechnicalFeatureService
+
+        analysis_service = MarketAnalysisService(
+            market_data_service=replay_service,
+        )
+        feature_service = TechnicalFeatureService(
+            market_data_service=replay_service,
+        )
+        strategy_service = StrategyEvaluationService(
+            market_data_service=replay_service,
+            analysis_service=analysis_service,
+            feature_service=feature_service,
+        )
+        signal_service = SignalEngineService(
+            market_data_service=replay_service,
+            analysis_service=analysis_service,
+            feature_service=feature_service,
+            strategy_service=strategy_service,
+        )
+        return signal_service
+
+    def _create_planning_service(self, replay_service: ReplayMarketDataService):
+        """
+        Create TradePlanningService using REPLAY data — never live data.
+        """
+        from app.modules.trade_planning.service import TradePlanningService
+
+        return TradePlanningService(market_data_service=replay_service)
+
+    # ------------------------------------------------------------------
+    # Per-candle evaluation
+    # ------------------------------------------------------------------
+
     async def _evaluate_at_candle(
         self,
         candle: HistoricalCandle,
         candles: list[HistoricalCandle],
         guard: LookAheadGuard,
         config: BacktestConfig,
+        signal_service,
+        planning_service,
     ) -> tuple[Optional[object], Optional[object]]:
         """
         Evaluate signals and generate a trade plan at a specific candle.
 
-        This is a thin adapter that wraps Phase 6 and Phase 7 services
-        with historical data injection.
+        Uses the pre-configured replay services — never creates live services.
+        The replay clock has already been advanced by the caller.
         """
         try:
             # Get visible candles up to current time
@@ -319,19 +431,6 @@ class BacktestRunner:
 
             if len(visible) < 50:
                 return None, None
-
-            # Build mock price data from visible candles
-            current_price = candle.close
-            bid = current_price - config.spread_pips * 0.01
-            ask = current_price + config.spread_pips * 0.01
-
-            # Try to import and use the real signal engine
-            # In a full implementation, we'd inject a mock MarketDataService
-            # that returns only visible candles. For now, we use a simplified path.
-
-            # Generate signal using existing engine (with live data — acknowledged limitation)
-            from app.modules.signal_engine.service import SignalEngineService
-            signal_service = SignalEngineService()
 
             strategy_ids = config.strategy_ids
             try:
@@ -354,10 +453,7 @@ class BacktestRunner:
             if signal.decision == DecisionType.NO_TRADE:
                 return None, None
 
-            # Generate trade plan
-            from app.modules.trade_planning.service import TradePlanningService
-            planning_service = TradePlanningService()
-
+            # Generate trade plan using replay service
             try:
                 plan = await planning_service.generate_plan(
                     signal=signal,

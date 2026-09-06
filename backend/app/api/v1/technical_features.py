@@ -81,6 +81,10 @@ async def technical_features(
         le=5000,
         description="Number of candles to fetch for feature calculation (50-5000)",
     ),
+    instrument: str = Query(
+        default="XAU/USD",
+        description="Instrument to analyze (e.g. XAU/USD, EUR/USD)",
+    ),
 ) -> dict:
     """
     Calculate all technical features for the given timeframe.
@@ -151,6 +155,10 @@ async def technical_features_multi_timeframe(
         le=5000,
         description="Number of candles per timeframe (50-5000)",
     ),
+    instrument: str = Query(
+        default="XAU/USD",
+        description="Instrument to analyze (e.g. XAU/USD, EUR/USD)",
+    ),
 ) -> dict:
     """
     Calculate technical features for multiple timeframes independently.
@@ -175,6 +183,7 @@ async def technical_features_multi_timeframe(
     result = await service.get_features_multi_timeframe(
         timeframes=tf_list,
         limit=limit,
+        instrument=instrument,
     )
 
     # Build response
