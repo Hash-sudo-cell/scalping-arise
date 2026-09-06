@@ -38,6 +38,7 @@ Flow:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections import deque
 from datetime import datetime, timezone
@@ -457,6 +458,28 @@ class DecisionEngineService:
             elapsed_ms,
         )
 
+        # ----------------------------------------------------------
+        # 12. Emit real-time event
+        # ----------------------------------------------------------
+        try:
+            from app.modules.events import get_event_bus
+            asyncio.get_event_loop().create_task(
+                get_event_bus().emit({
+                    "type": "decision",
+                    "decision_id": decision.decision_id,
+                    "state": decision.state.value,
+                    "direction": decision.direction.value,
+                    "confidence": decision.confidence,
+                    "quality": decision.quality,
+                    "gates_passed": decision.gates_passed,
+                    "gates_total": decision.gates_total,
+                    "instrument": instrument,
+                    "signal_id": signal_id,
+                })
+            )
+        except Exception:
+            pass  # Non-critical, never block decision flow
+
         return decision
 
     # ------------------------------------------------------------------
@@ -516,6 +539,19 @@ class DecisionEngineService:
         self._emergency.disable(reason)
         self._audit.record_emergency(True, reason)
         self._monitoring.record_emergency_toggle()
+        self._persist_state()
+        # Emit real-time event
+        try:
+            asyncio.get_event_loop().create_task(
+                get_event_bus().emit({
+                    "type": "emergency",
+                    "action": "disable",
+                    "reason": reason,
+                    "status": self._emergency.get_status(),
+                })
+            )
+        except Exception:
+            pass
         return self._emergency.get_status()
 
     def emergency_enable(self, reason: str = "Manual emergency enable") -> dict:
@@ -523,6 +559,19 @@ class DecisionEngineService:
         self._emergency.enable(reason)
         self._audit.record_emergency(False, reason)
         self._monitoring.record_emergency_toggle()
+        self._persist_state()
+        # Emit real-time event
+        try:
+            asyncio.get_event_loop().create_task(
+                get_event_bus().emit({
+                    "type": "emergency",
+                    "action": "enable",
+                    "reason": reason,
+                    "status": self._emergency.get_status(),
+                })
+            )
+        except Exception:
+            pass
         return self._emergency.get_status()
 
     def get_emergency_status(self) -> dict:

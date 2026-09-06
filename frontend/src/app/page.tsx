@@ -10,6 +10,7 @@ import TradePlanStatus from "@/components/TradePlanStatus";
 import BacktestStatus from "@/components/BacktestStatus";
 import DecisionStatus from "@/components/DecisionStatus";
 import InstrumentAwareIntelligenceStatus from "@/components/InstrumentAwareIntelligenceStatus";
+import RealtimeStatus from "@/components/RealtimeStatus";
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Scalping Arise";
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0";
@@ -29,6 +30,7 @@ export default function Home() {
         <div className="info-badge">Decision Engine</div>
         <div className="info-badge">v{APP_VERSION}</div>
         <InstrumentSelector />
+        <RealtimeStatus />
       </div>
 
       <HealthStatus />

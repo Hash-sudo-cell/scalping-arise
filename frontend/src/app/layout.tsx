@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { InstrumentProvider } from "@/contexts/InstrumentContext";
+import { RealtimeProvider } from "@/contexts/RealtimeContext";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,7 +17,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <InstrumentProvider>{children}</InstrumentProvider>
+        <InstrumentProvider>
+          <RealtimeProvider>{children}</RealtimeProvider>
+        </InstrumentProvider>
       </body>
     </html>
   );
