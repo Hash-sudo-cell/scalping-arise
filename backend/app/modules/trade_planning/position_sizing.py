@@ -58,8 +58,8 @@ def calculate_position_size(
     risk_pct_actual = (actual_risk / account_balance * 100) if account_balance > 0 else 0.0
 
     # Margin calculation
-    notional = lots * spec.contract_size * (sl_distance_price + spec.round_price(sl_distance_price))
-    # Simplified: use entry-level notional for margin (SL price is approximate)
+    # Note: margin is based on contract size and margin rate (simplified model).
+    # A production system would multiply by entry price for true notional value.
     margin_required = lots * spec.contract_size * spec.margin_rate
     margin_pct = (margin_required / account_balance * 100) if account_balance > 0 else 0.0
 

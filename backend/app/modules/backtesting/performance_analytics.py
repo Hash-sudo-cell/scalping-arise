@@ -25,6 +25,7 @@ from app.modules.backtesting.models import (
     RiskMetrics,
     TradeStatistics,
 )
+from app.modules.trade_planning.instrument_specs import get_spec
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +155,7 @@ class PerformanceAnalytics:
 
         # Consecutive wins/losses
         max_consec_wins, max_consec_losses = self._consecutive_streaks()
+        current_wins, current_losses = self._current_streak()
 
         # Recovery factor
         max_dd = self._compute_max_drawdown()
@@ -178,8 +180,8 @@ class PerformanceAnalytics:
             profit_factor=profit_factor,
             expectancy=expectancy,
             kelly_criterion=kelly,
-            consecutive_wins=0,
-            consecutive_losses=0,
+            consecutive_wins=current_wins,
+            consecutive_losses=current_losses,
             max_consecutive_wins=max_consec_wins,
             max_consecutive_losses=max_consec_losses,
             payoff_ratio=payoff_ratio,
@@ -210,6 +212,29 @@ class PerformanceAnalytics:
                 current_losses = 0
 
         return max_wins, max_losses
+
+    def _current_streak(self) -> tuple[int, int]:
+        """Return the current streak length for wins and losses (from the tail of trades)."""
+        if not self._trades:
+            return 0, 0
+
+        current_wins = 0
+        current_losses = 0
+
+        # Walk backwards from the most recent trade
+        for t in reversed(self._trades):
+            if t.is_winner:
+                current_wins += 1
+                if current_losses > 0:
+                    break
+            elif t.net_pnl < 0:
+                current_losses += 1
+                if current_wins > 0:
+                    break
+            else:
+                break
+
+        return current_wins, current_losses
 
     # ------------------------------------------------------------------
     # Risk Metrics
@@ -452,7 +477,6 @@ class PerformanceAnalytics:
         # Slippage in basis points (average)
         pip_values = []
         for t in self._trades:
-            from app.modules.trade_planning.instrument_specs import get_spec
             spec = get_spec(t.instrument)
             pip_value = (spec.tick_size * 10) if spec else 0.01
             if pip_value > 0 and t.lots > 0:

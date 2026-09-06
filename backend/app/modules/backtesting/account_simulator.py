@@ -70,6 +70,13 @@ class AccountSimulator:
 
     @property
     def equity(self) -> float:
+        """Current equity = balance + unrealized P&L from last snapshot.
+
+        Note: This returns the equity from the most recent snapshot.
+        Call take_snapshot() to update with current open position data.
+        """
+        if self._snapshots:
+            return self._snapshots[-1].equity
         return self._balance
 
     @property

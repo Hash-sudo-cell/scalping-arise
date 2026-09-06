@@ -154,7 +154,10 @@ def validate_candle(
 # Duplicate detection
 # ---------------------------------------------------------------------------
 
-class DuplicateType(str):
+from enum import Enum
+
+
+class DuplicateType(str, Enum):
     EXACT = "exact"
     FORMING_UPDATE = "forming_update"
     CONFLICTING = "conflicting"
@@ -188,10 +191,15 @@ def classify_duplicate(
         return DuplicateType.EXACT
 
     if not existing.is_closed and incoming.is_closed:
-        return DuplicateType.FORMING_UPDATE
+        # Incoming closed candle may finalize the existing forming candle.
+        # If OHLC differs, this is a conflict (closed candle should not disagree
+        # with a prior forming candle's data). If same OHLC, it's an update.
+        return DuplicateType.FORMING_UPDATE if same_ohlc else DuplicateType.CONFLICTING
 
     if existing.is_closed and not incoming.is_closed:
-        return DuplicateType.FORMING_UPDATE
+        # Forming candle arriving for a timestamp that already has a closed candle.
+        # Always conflicting — closed data must not be overwritten by forming.
+        return DuplicateType.CONFLICTING
 
     if same_ohlc:
         return DuplicateType.FORMING_UPDATE

@@ -244,7 +244,7 @@ class BacktestRunner:
                                 trade_sim.submit_order(order)
                                 trades_executed += 1
                         else:
-                            portfolio._current_bar_index = i
+                            pass  # No trade executed at this bar
 
             # Step 6: Close remaining open positions
             if candles:

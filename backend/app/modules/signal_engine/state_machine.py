@@ -153,9 +153,14 @@ class SignalStateMachine:
         now = datetime.now(timezone.utc)
         to_remove = []
         for sid, record in self._records.items():
-            if record.state in (SignalState.EXPIRED, SignalState.INVALIDATED):
-                terminal_time = record.expired_at or record.invalidated_at
-                if terminal_time and (now - terminal_time).total_seconds() > max_age_seconds:
+            if record.state in (SignalState.EXPIRED, SignalState.INVALIDATED, SignalState.NO_SIGNAL):
+                terminal_time = (
+                    record.expired_at
+                    or record.invalidated_at
+                    or (record.state_history[-1].timestamp if record.state_history else None)
+                    or record.created_at
+                )
+                if (now - terminal_time).total_seconds() > max_age_seconds:
                     to_remove.append(sid)
         for sid in to_remove:
             del self._records[sid]

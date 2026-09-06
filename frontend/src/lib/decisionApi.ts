@@ -4,7 +4,9 @@
  * Type-safe API client for the Phase 10 decision engine endpoints.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+
+const FETCH_TIMEOUT = 30000; // 30 seconds
 
 // ---------------------------------------------------------------------------
 // Types
@@ -187,6 +189,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
   const res = await fetch(url, {
     headers: { "Content-Type": "application/json", ...options?.headers },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT),
     ...options,
   });
   if (!res.ok) {
@@ -198,19 +201,19 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
 // Health
 export async function getHealth(): Promise<Record<string, unknown>> {
-  return apiFetch("/decision/health");
+  return apiFetch("/api/v1/decision/health");
 }
 
 // Capabilities
 export async function getCapabilities(): Promise<Record<string, unknown>> {
-  return apiFetch("/decision/capabilities");
+  return apiFetch("/api/v1/decision/capabilities");
 }
 
 // Evaluate
 export async function evaluateDecision(
   request: EvaluateRequest,
 ): Promise<FinalDecision> {
-  return apiFetch("/decision/evaluate", {
+  return apiFetch("/api/v1/decision/evaluate", {
     method: "POST",
     body: JSON.stringify(request),
   });
@@ -220,7 +223,7 @@ export async function evaluateDecision(
 export async function getDecision(
   decisionId: string,
 ): Promise<FinalDecision> {
-  return apiFetch(`/decision/${decisionId}`);
+  return apiFetch(`/api/v1/decision/${decisionId}`);
 }
 
 // Active decisions
@@ -228,14 +231,14 @@ export async function getActiveDecisions(): Promise<{
   count: number;
   decisions: DecisionSummary[];
 }> {
-  return apiFetch("/decision/active");
+  return apiFetch("/api/v1/decision/active");
 }
 
 // History
 export async function getHistory(
   limit: number = 20,
 ): Promise<{ count: number; decisions: DecisionSummary[] }> {
-  return apiFetch(`/decision/history?limit=${limit}`);
+  return apiFetch(`/api/v1/decision/history?limit=${limit}`);
 }
 
 // Invalidate
@@ -244,7 +247,7 @@ export async function invalidateDecision(
   reason: string = "Manual invalidation",
 ): Promise<{ success: boolean; error?: string }> {
   return apiFetch(
-    `/decision/${decisionId}/invalidate?reason=${encodeURIComponent(reason)}`,
+    `/api/v1/decision/${decisionId}/invalidate?reason=${encodeURIComponent(reason)}`,
     { method: "POST" },
   );
 }
@@ -253,12 +256,12 @@ export async function invalidateDecision(
 export async function getAuditTrail(
   decisionId: string,
 ): Promise<{ decision_id: string; count: number; entries: Record<string, unknown>[] }> {
-  return apiFetch(`/decision/${decisionId}/audit`);
+  return apiFetch(`/api/v1/decision/${decisionId}/audit`);
 }
 
 // Monitoring counters
 export async function getCounters(): Promise<MonitoringCounters> {
-  return apiFetch("/decision/monitoring/counters");
+  return apiFetch("/api/v1/decision/monitoring/counters");
 }
 
 // Emergency toggle
@@ -271,7 +274,7 @@ export async function toggleEmergency(
   message: string;
   toggled_at: string | null;
 }> {
-  return apiFetch("/decision/emergency/disable", {
+  return apiFetch("/api/v1/decision/emergency/disable", {
     method: "POST",
     body: JSON.stringify({ disable, reason }),
   });
@@ -279,12 +282,12 @@ export async function toggleEmergency(
 
 // Emergency status
 export async function getEmergencyStatus(): Promise<EmergencyStatus> {
-  return apiFetch("/decision/emergency/status");
+  return apiFetch("/api/v1/decision/emergency/status");
 }
 
 // Readiness
 export async function getReadiness(): Promise<Record<string, unknown>> {
-  return apiFetch("/decision/readiness");
+  return apiFetch("/api/v1/decision/readiness");
 }
 
 // Retention cleanup
@@ -292,5 +295,5 @@ export async function runRetentionCleanup(): Promise<{
   success: boolean;
   removed: number;
 }> {
-  return apiFetch("/decision/retention/cleanup", { method: "POST" });
+  return apiFetch("/api/v1/decision/retention/cleanup", { method: "POST" });
 }

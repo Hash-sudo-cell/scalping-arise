@@ -108,15 +108,13 @@ def calculate_quality_score(
             ]
 
         if not cat_results and not cat_liq_results:
-            # No conditions in this category — award partial credit if no failures
-            awarded = max_pts // 2  # Default: 50% for no data
+            # No conditions in this category — no credit
             breakdown.append(QualityScoreBreakdown(
                 category=category,
-                points_awarded=awarded,
+                points_awarded=0,
                 max_points=max_pts,
                 reason="No conditions in this category",
             ))
-            total_score += awarded
             total_max += max_pts
             continue
 

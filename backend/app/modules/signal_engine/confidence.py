@@ -78,7 +78,7 @@ def _score_mtf_confirmation(
         "strong": 1.0,
         "moderate": 0.7,
         "weak": 0.4,
-        "none": 0.1,
+        "none": 0.0,
     }
     level_score = level_map.get(mtf_result.confirmation_level.value, 0.5)
 

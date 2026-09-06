@@ -99,7 +99,6 @@ class DecisionEngineService:
         self._market_data = market_data_service
 
         # Sub-components
-        self._gate_engine = GateEngine(settings=self._settings)
         self._audit = AuditTrail(max_entries=self._settings.audit_max_entries)
         self._idempotency = IdempotencyCache(
             max_size=self._settings.idempotency_cache_size,
@@ -108,6 +107,10 @@ class DecisionEngineService:
         self._monitoring = MonitoringService()
         self._emergency = EmergencyController(
             initial_state=self._settings.emergency_disable,
+        )
+        self._gate_engine = GateEngine(
+            settings=self._settings,
+            emergency_active=self._emergency.is_disabled,
         )
 
         # Decision storage (ring buffer)

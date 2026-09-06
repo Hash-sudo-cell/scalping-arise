@@ -417,7 +417,7 @@ def _eval_pc_price_near_support_resistance(condition, analysis, features, direct
             evidence=["No zones detected"],
         )
     for zone in zones:
-        if zone.lower_bound <= current_price <= zone.upper_bound * 1.02:
+        if zone.lower_bound * 0.98 <= current_price <= zone.upper_bound * 1.02:
             return _make_passed(
                 condition,
                 actual_value=f"price={current_price:.2f}, zone=[{zone.lower_bound:.2f}-{zone.upper_bound:.2f}]",
@@ -601,7 +601,7 @@ def _eval_rr_price_at_boundary(condition, analysis, features, direction, regime_
             reason="No S/R zones detected — cannot determine boundary",
         )
     for zone in zones:
-        if zone.lower_bound <= current_price <= zone.upper_bound * 1.03:
+        if zone.lower_bound * 0.97 <= current_price <= zone.upper_bound * 1.03:
             return _make_passed(
                 condition,
                 actual_value=f"price={current_price:.2f}, zone=[{zone.lower_bound:.2f}-{zone.upper_bound:.2f}]",
@@ -675,18 +675,39 @@ def _eval_rr_bb_extreme(condition, analysis, features, direction, regime_state):
 
 
 def _eval_rr_structure_supports_reversal(condition, analysis, features, direction, regime_state):
-    """Range Reversal: structure shows reversal signs."""
+    """Range Reversal: structure shows reversal signs (deceleration pattern)."""
     if analysis is None or analysis.structure is None:
         return _make_unavailable(condition, "Structure analysis not available")
     labels = analysis.structure.latest_labels
     if not labels:
         return _make_failed(condition, "no labels", "No structure labels available")
     recent = labels[-3:] if len(labels) >= 3 else labels
-    return _make_passed(
+    recent_values = [l.value for l in recent]
+    if direction == StrategyDirection.BULLISH:
+        has_bearish = any(v in ("LL", "LH") for v in recent_values)
+        has_bullish = any(v in ("HH", "HL") for v in recent_values)
+        if has_bearish and has_bullish:
+            return _make_passed(
+                condition,
+                actual_value=f"recent_labels={recent_values}",
+                reason="Structure shows deceleration (bearish then bullish labels)",
+                evidence=[f"Recent labels: {recent_values}"],
+            )
+    else:
+        has_bullish = any(v in ("HH", "HL") for v in recent_values)
+        has_bearish = any(v in ("LL", "LH") for v in recent_values)
+        if has_bullish and has_bearish:
+            return _make_passed(
+                condition,
+                actual_value=f"recent_labels={recent_values}",
+                reason="Structure shows deceleration (bullish then bearish labels)",
+                evidence=[f"Recent labels: {recent_values}"],
+            )
+    return _make_failed(
         condition,
-        actual_value=f"recent_labels={[l.value for l in recent]}",
-        reason=f"Structure labels present: {[l.value for l in recent]}",
-        evidence=[f"Recent labels: {[l.value for l in recent]}"],
+        actual_value=f"recent_labels={recent_values}",
+        reason="No deceleration pattern in recent structure labels",
+        evidence=[f"Recent labels: {recent_values}"],
     )
 
 
@@ -702,10 +723,10 @@ def _eval_rr_volume_spike(condition, analysis, features, direction, regime_state
             reason="Volume spike detected at range boundary",
             evidence=[f"Volume state: {vol.state.value}"],
         )
-    return _make_passed(
+    return _make_failed(
         condition,
         actual_value=f"volume_state={vol.state.value}",
-        reason=f"Volume state: {vol.state.value} — not spiking",
+        reason=f"Volume state: {vol.state.value} — no spike at boundary",
         evidence=[f"Volume state: {vol.state.value}"],
     )
 

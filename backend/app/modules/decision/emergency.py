@@ -97,7 +97,8 @@ class EmergencyController:
             self.disable(reason or "Emergency toggle to disable")
         else:
             self.enable(reason or "Emergency toggle to enable")
-        return self._disabled
+        with self._lock:
+            return self._disabled
 
     def get_status(self) -> dict:
         """Get the current emergency status."""

@@ -97,7 +97,7 @@ def calculate_ema(
 
     # Determine direction by comparing to previous EMA
     prev_ema = ema_series[-2] if len(ema_series) > 1 else None
-    if prev_ema is not None and prev_ema is not None:
+    if prev_ema is not None:
         diff_pct = (latest_ema - prev_ema) / prev_ema * 100
         if diff_pct > 0.01:
             direction = EMADirection.RISING

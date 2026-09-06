@@ -5,6 +5,7 @@ import TechnicalFeaturesStatus from "@/components/TechnicalFeaturesStatus";
 import StrategyEvaluationStatus from "@/components/StrategyEvaluationStatus";
 import SignalEvaluationStatus from "@/components/SignalEvaluationStatus";
 import IntelligenceStatus from "@/components/IntelligenceStatus";
+import TradePlanStatus from "@/components/TradePlanStatus";
 import BacktestStatus from "@/components/BacktestStatus";
 import DecisionStatus from "@/components/DecisionStatus";
 
@@ -33,6 +34,7 @@ export default function Home() {
       <TechnicalFeaturesStatus />
       <StrategyEvaluationStatus />
       <SignalEvaluationStatus />
+      <TradePlanStatus />
       <IntelligenceStatus instrument="XAU/USD" strategyId="default" />
       <BacktestStatus />
       <DecisionStatus />

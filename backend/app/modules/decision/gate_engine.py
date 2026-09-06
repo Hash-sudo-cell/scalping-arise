@@ -114,10 +114,17 @@ def build_default_gate_pipeline() -> list[GateDefinition]:
 
 def _eval_emergency_disable(
     settings: DecisionEngineSettings,
+    *,
+    emergency_active: Optional[bool] = None,
     **_kwargs: Any,
 ) -> GateResult:
-    """Gate: emergency kill switch."""
-    if settings.emergency_disable:
+    """Gate: emergency kill switch.
+
+    Checks the runtime emergency state first (if provided), falling back
+    to the static configuration value.
+    """
+    is_active = emergency_active if emergency_active is not None else settings.emergency_disable
+    if is_active:
         return GateResult(
             gate=GateName.EMERGENCY_DISABLE,
             status=GateStatus.FAILED,
@@ -500,9 +507,11 @@ class GateEngine:
         self,
         settings: Optional[DecisionEngineSettings] = None,
         pipeline: Optional[list[GateDefinition]] = None,
+        emergency_active: Optional[bool] = None,
     ) -> None:
         self._settings = settings
         self._pipeline = pipeline or build_default_gate_pipeline()
+        self._emergency_active = emergency_active
 
     def evaluate(
         self,
@@ -533,6 +542,7 @@ class GateEngine:
         settings = self._settings or get_decision_engine_settings()
 
         context: dict[str, Any] = {
+            "emergency_active": self._emergency_active,
             "signal_age_seconds": signal_age_seconds,
             "signal_quality": signal_quality,
             "signal_confidence": signal_confidence,

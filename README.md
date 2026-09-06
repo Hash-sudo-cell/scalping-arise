@@ -13,17 +13,17 @@ Scalping Arise analyzes market data through progressive layers — from raw mark
 | Phase | Description | Status |
 |-------|-------------|--------|
 | Phase 1 | Project Foundation & Configuration | **Complete** |
-| Phase 2 | Market Data Infrastructure | **Complete & Corrected** |
+| Phase 2 | Market Data Infrastructure | **Complete** |
 | Phase 3 | Market Analysis & Structure Engine | **Complete** |
 | Phase 4 Core | Technical Indicators & Feature Engine | **Complete** |
 | Phase 4 Extension | Multi-Timeframe, Volatility Classification, Feature Status | **Complete** |
 | Phase 5 | Strategy Definition & Evaluation | **Complete** |
 | Phase 5 Extension | Liquidity Integration | **Complete** |
 | Phase 6 | Signal & Confirmation Layer | **Complete** |
-| Phase 7 | Trade Planning & Risk Engine | Planned |
-| Phase 8 | News, Events & Performance Intelligence | Planned |
-| Phase 9 | Backtesting & Forward Testing | Planned |
-| Phase 10 | Final Integration & Production System | Planned |
+| Phase 7 | Trade Planning & Risk Engine | **Complete** |
+| Phase 8 | News, Events & Performance Intelligence | **Complete** |
+| Phase 9 | Backtesting & Forward Testing | **Complete** |
+| Phase 10 | Final Integration & Decision Engine | **Complete** |
 
 ---
 
@@ -40,7 +40,7 @@ Technical Indicators & Feature Engine
     ↓
 Strategy Definition & Evaluation
     ↓
-Signal Generation & Decision Engine
+Signal Generation & Confidence Scoring
     ↓
 Trade Planning & Risk Management
     ↓
@@ -48,10 +48,10 @@ News / Event & Performance Intelligence
     ↓
 Backtesting & Forward Testing
     ↓
-Explainability, Monitoring & Production Integration
+Decision Engine & Final Integration
 ```
 
-Each phase has clear responsibilities. Phases do not merge responsibilities. Future phases must not be implemented until their predecessor is complete and approved.
+Each phase has clear responsibilities. Phases do not merge responsibilities.
 
 ---
 
@@ -59,42 +59,60 @@ Each phase has clear responsibilities. Phases do not merge responsibilities. Fut
 
 ```
 scalping-arise/
-├── backend/                          # Python — FastAPI
+├── backend/                              # Python — FastAPI
 │   ├── app/
-│   │   ├── api/v1/                   # Versioned API endpoints
-│   │   │   ├── health.py             # System health
-│   │   │   ├── market_data.py        # Phase 2 market data
-│   │   │   ├── market_analysis.py    # Phase 3 analysis
-│   │   │   ├── technical_features.py # Phase 4 features
-│   │   │   ├── strategies.py         # Phase 5 strategy evaluation
-│   │   │   └── signals.py            # Phase 6 signal evaluation
-│   │   ├── config/                   # Centralized settings
-│   │   ├── core/                     # Error handling, logging
+│   │   ├── api/v1/                       # Versioned API endpoints
+│   │   │   ├── health.py                 # System health
+│   │   │   ├── market_data.py            # Phase 2 market data
+│   │   │   ├── market_analysis.py        # Phase 3 analysis
+│   │   │   ├── technical_features.py     # Phase 4 features
+│   │   │   ├── strategies.py             # Phase 5 strategy evaluation
+│   │   │   ├── signals.py                # Phase 6 signal evaluation
+│   │   │   ├── trade_planning.py         # Phase 7 trade planning
+│   │   │   ├── intelligence.py           # Phase 8 intelligence
+│   │   │   ├── backtesting.py            # Phase 9 backtesting
+│   │   │   └── decision.py               # Phase 10 decision engine
+│   │   ├── config/                       # Centralized settings
+│   │   ├── core/                         # Error handling, logging
 │   │   └── modules/
-│   │       ├── market_data/          # Phase 2 — Provider abstraction, caching, failover
-│   │       ├── market_analysis/      # Phase 3 — Structure, trend, BOS/CHOCH, S/R, regime, liquidity
-│   │       ├── technical_features/   # Phase 4 — EMA, RSI, MACD, ATR, BB, Volume, Price
-│   │       ├── strategies/           # Phase 5 — Definitions, eligibility, condition engine, invalidation, quality
-│   │       └── signal_engine/        # Phase 6 — Candidate generation, MTF confirmation, conflicts, confidence, qualification
-│   ├── tests/                        # 519 tests
-│   ├── .env.example                  # Environment template
-│   ├── pyproject.toml                # pytest configuration
-│   └── requirements.txt              # Python dependencies
-├── frontend/                         # TypeScript — Next.js 15 (App Router)
+│   │       ├── market_data/              # Provider abstraction, caching, validation
+│   │       ├── market_analysis/          # Structure, trend, BOS/CHOCH, S/R, regime
+│   │       ├── technical_features/       # EMA, RSI, MACD, ATR, BB, Volume
+│   │       ├── strategies/               # Definitions, condition engine, quality
+│   │       ├── signal_engine/            # Candidates, MTF, conflicts, confidence
+│   │       ├── trade_planning/           # Position sizing, plans, risk, instruments
+│   │       ├── news_intelligence/        # Event detection, performance tracking
+│   │       ├── backtesting/              # Simulators, analytics, runner, paper trading
+│   │       └── decision/                 # Gates, merge, explainability, audit, emergency
+│   ├── tests/                            # 1022 tests
+│   ├── .env.example                      # Environment template
+│   ├── pyproject.toml                    # pytest configuration
+│   └── requirements.txt                  # Python dependencies
+├── frontend/                             # TypeScript — Next.js 15 (App Router)
 │   ├── src/
-│   │   ├── app/                      # Pages and layouts
-│   │   ├── components/               # React components
+│   │   ├── app/                          # Pages and layouts
+│   │   ├── components/                   # React components
 │   │   │   ├── HealthStatus.tsx
 │   │   │   ├── MarketDataStatus.tsx
 │   │   │   ├── MarketAnalysisStatus.tsx
 │   │   │   ├── TechnicalFeaturesStatus.tsx
-│   │   │   └── StrategyEvaluationStatus.tsx
-│   │   └── lib/                      # Typed API clients
+│   │   │   ├── StrategyEvaluationStatus.tsx
+│   │   │   ├── SignalEvaluationStatus.tsx
+│   │   │   ├── IntelligenceStatus.tsx
+│   │   │   ├── TradePlanStatus.tsx
+│   │   │   ├── BacktestStatus.tsx
+│   │   │   └── DecisionStatus.tsx
+│   │   └── lib/                          # Typed API clients
 │   │       ├── api.ts
 │   │       ├── analysisApi.ts
 │   │       ├── featuresApi.ts
-│   │       └── strategiesApi.ts
-│   ├── .env.example                  # Frontend environment template
+│   │       ├── strategiesApi.ts
+│   │       ├── signalsApi.ts
+│   │       ├── tradePlanningApi.ts
+│   │       ├── intelligenceApi.ts
+│   │       ├── backtestingApi.ts
+│   │       └── decisionApi.ts
+│   ├── .env.example                      # Frontend environment template
 │   ├── package.json
 │   └── tsconfig.json
 ├── .gitignore
@@ -176,7 +194,7 @@ cd backend
 pytest -v
 ```
 
-Current baseline: **519 tests passing, 0 failures**.
+Current baseline: **1022 tests passing, 0 failures**.
 
 ### Frontend
 
@@ -206,11 +224,6 @@ All endpoints are prefixed with `/api/v1`.
 | GET | `/api/v1/market-data/latest` | Latest market price |
 | GET | `/api/v1/market-data/capabilities` | Provider capabilities |
 
-**Parameters for candles:**
-- `instrument` — Canonical instrument (default: `XAU/USD`)
-- `timeframe` — Candle timeframe (default: `1h`). Options: `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, `1w`, `1mo`
-- `limit` — Number of candles (1–5000, default: 100)
-
 ### Market Analysis (Phase 3)
 
 | Method | Path | Description |
@@ -218,11 +231,6 @@ All endpoints are prefixed with `/api/v1`.
 | GET | `/api/v1/market-analysis/health` | Analysis engine health |
 | GET | `/api/v1/market-analysis/capabilities` | Analysis capabilities |
 | GET | `/api/v1/market-analysis` | Full market analysis pipeline |
-
-**Parameters for analysis:**
-- `instrument` — Canonical instrument (default: `XAU/USD`)
-- `timeframe` — Candle timeframe (default: `1h`)
-- `limit` — Number of candles (20–5000, default: 200)
 
 ### Technical Features (Phase 4)
 
@@ -233,58 +241,73 @@ All endpoints are prefixed with `/api/v1`.
 | GET | `/api/v1/technical-features` | All technical features |
 | GET | `/api/v1/technical-features/multi-timeframe` | Multi-timeframe features |
 
-**Parameters for features:**
-- `timeframe` — Candle timeframe (default: `1h`)
-- `limit` — Number of candles (50–5000, default: 300)
-
-**Parameters for multi-timeframe:**
-- `timeframes` — Comma-separated timeframes (default: `1m,5m,15m`)
-- `limit` — Number of candles per timeframe (50–5000, default: 300)
-
 ### Strategy Evaluation (Phase 5)
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/strategies/health` | Strategy engine health |
-| GET | `/api/v1/strategies/capabilities` | Strategy capabilities and registered strategies |
+| GET | `/api/v1/strategies/capabilities` | Strategy capabilities |
 | GET | `/api/v1/strategies` | List all strategy definitions |
 | GET | `/api/v1/strategies/evaluate` | Evaluate a single strategy |
 | GET | `/api/v1/strategies/evaluate-all` | Evaluate all enabled strategies |
-
-**Parameters for evaluate:**
-- `strategy_id` — Strategy to evaluate (required). Options: `trend_continuation`, `pullback_continuation`, `range_reversal`
-- `instrument` — Canonical instrument (default: `XAU/USD`)
-- `timeframes` — Comma-separated timeframes (default: `15m,5m,1m`)
-- `candle_limit` — Candles per timeframe (default: 300)
-
-**Parameters for evaluate-all:**
-- `instrument` — Canonical instrument (default: `XAU/USD`)
-- `timeframes` — Comma-separated timeframes (default: `15m,5m,1m`)
-- `candle_limit` — Candles per timeframe (default: 300)
 
 ### Signal Evaluation (Phase 6)
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/signals/health` | Signal engine health |
-| GET | `/api/v1/signals/capabilities` | Signal engine capabilities and thresholds |
+| GET | `/api/v1/signals/capabilities` | Signal engine capabilities |
 | GET | `/api/v1/signals/evaluate` | Full signal evaluation pipeline |
 
-**Parameters for evaluate:**
-- `instrument` — Canonical instrument (default: `XAU/USD`)
-- `timeframes` — Comma-separated timeframes (default: `1m,5m,15m`)
-- `limit` — Candles per timeframe (default: 300)
-- `strategy_ids` — Comma-separated strategy IDs to evaluate (default: all enabled)
+### Trade Planning (Phase 7)
 
-**Signal evaluation flow:**
-1. Collects Phase 3 (Market Analysis), Phase 4 (Technical Features), and Phase 5 (Strategy Evaluation) outputs
-2. Generates directional signal candidates from qualified strategies
-3. Evaluates multi-timeframe confirmation (EMA alignment + trend state)
-4. Detects directional conflicts between candidates
-5. Resolves conflicts using quality-weighted voting
-6. Aggregates all evidence (strategy, MTF, regime, structure, liquidity)
-7. Calculates composite confidence score (strategy alignment + MTF + evidence + regime)
-8. Qualifies the final signal (QUALIFIED / REJECTED / CONFLICT / INSUFFICIENT_CONTEXT)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/trade-planning/health` | Trade planning health |
+| POST | `/api/v1/trade-planning/generate` | Generate a trade plan |
+| GET | `/api/v1/trade-planning/validate` | Validate a plan |
+| GET | `/api/v1/trade-planning/instruments` | Instrument specifications |
+
+### Intelligence (Phase 8)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/intelligence/evaluate` | Evaluate intelligence |
+| GET | `/api/v1/intelligence/strategy-state/{id}` | Strategy state |
+| POST | `/api/v1/intelligence/record-outcome` | Record trade outcome |
+| GET | `/api/v1/intelligence/metrics/{id}` | Strategy metrics |
+
+### Backtesting (Phase 9)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/backtesting/run` | Run a backtest |
+| GET | `/api/v1/backtesting/runs` | List backtest runs |
+| GET | `/api/v1/backtesting/runs/{id}` | Get a specific run |
+| GET | `/api/v1/backtesting/runs/{id}/trades` | Get trades for a run |
+| GET | `/api/v1/backtesting/runs/{id}/analytics` | Get analytics |
+| DELETE | `/api/v1/backtesting/runs/{id}` | Delete a run |
+| GET | `/api/v1/backtesting/health` | Backtesting health |
+| POST | `/api/v1/backtesting/paper-trading/start` | Start paper trading |
+| POST | `/api/v1/backtesting/paper-trading/{id}/stop` | Stop paper trading |
+
+### Decision Engine (Phase 10)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/decision/health` | Decision engine health |
+| GET | `/api/v1/decision/capabilities` | Decision engine capabilities |
+| POST | `/api/v1/decision/evaluate` | Evaluate a decision |
+| GET | `/api/v1/decision/{id}` | Get a specific decision |
+| GET | `/api/v1/decision/active` | Get active decisions |
+| GET | `/api/v1/decision/history` | Get decision history |
+| POST | `/api/v1/decision/{id}/invalidate` | Invalidate a decision |
+| GET | `/api/v1/decision/{id}/audit` | Get audit trail |
+| GET | `/api/v1/decision/monitoring/counters` | Monitoring counters |
+| POST | `/api/v1/decision/emergency/disable` | Toggle emergency kill switch |
+| GET | `/api/v1/decision/emergency/status` | Emergency status |
+| GET | `/api/v1/decision/readiness` | System readiness |
+| POST | `/api/v1/decision/retention/cleanup` | Run retention cleanup |
 
 ---
 
@@ -297,39 +320,13 @@ The system uses two different data sources for XAU/USD:
 | Twelve Data | XAU/USD | XAU/USD | SPOT |
 | yfinance | XAU/USD | GC=F | FUTURES_PROXY |
 
-**These are not identical.** GC=F is gold futures, not spot XAU/USD. The system preserves source identity throughout the pipeline. Source metadata (`source_type`, `provider_instrument`) is always included in responses.
-
-The system must never pretend that `GC=F` is native XAU/USD spot data. They are different data sources with different characteristics.
+**These are not identical.** GC=F is gold futures, not spot XAU/USD. The system preserves source identity throughout the pipeline.
 
 ---
 
 ## Configuration
 
 All backend environment variables use the `SCALPING_ARISE_` prefix. See `backend/.env.example` for the complete template.
-
-### Key Configuration Groups
-
-- **Application** — Name, version, environment, debug mode
-- **Server** — Host, port, workers, API prefix, CORS
-- **Providers** — Primary (Twelve Data) and fallback (yfinance)
-- **Data Freshness** — Maximum allowed data age per timeframe
-- **Cache** — In-memory candle cache (TTL-based, LRU eviction)
-- **Technical Features** — EMA, RSI, MACD, ATR, Bollinger, Volume, Price parameters
-- **Volatility** — ATR percentage thresholds for classification
-
----
-
-## Development Rules
-
-1. **Do not mix phases.** Each phase has clear boundaries.
-2. **No look-ahead bias.** Features at candle N must only use candles up to N.
-3. **Preserve source metadata.** Source identity flows through the entire pipeline.
-4. **Do not hardcode secrets.** Use environment variables.
-5. **Add tests for new functionality.** Every module has corresponding tests.
-6. **Run regression tests before declaring a phase complete.**
-7. **Do not add BUY/SELL logic before Phase 6.** Phases 1-5 are descriptive only.
-8. **Volume is optional.** Its absence must not cause other features to fail.
-9. **One timeframe failing must not destroy other timeframes** (multi-timeframe context).
 
 ---
 

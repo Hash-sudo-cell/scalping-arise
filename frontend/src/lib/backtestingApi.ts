@@ -4,7 +4,9 @@
  * Type-safe API client for the backtesting module endpoints.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+
+const FETCH_TIMEOUT = 30000; // 30 seconds
 
 // ---------------------------------------------------------------------------
 // Types
@@ -143,7 +145,9 @@ interface ApiResponse<T> {
 
 async function apiGet<T>(path: string): Promise<ApiResponse<T>> {
   try {
-    const res = await fetch(`${API_BASE}${path}`);
+    const res = await fetch(`${API_BASE}${path}`, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT),
+    });
     if (!res.ok) {
       return { ok: false, data: null, error: `HTTP ${res.status}: ${res.statusText}` };
     }
@@ -160,6 +164,7 @@ async function apiPost<T>(path: string, body?: unknown): Promise<ApiResponse<T>>
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(FETCH_TIMEOUT),
     });
     if (!res.ok) {
       return { ok: false, data: null, error: `HTTP ${res.status}: ${res.statusText}` };
@@ -173,7 +178,10 @@ async function apiPost<T>(path: string, body?: unknown): Promise<ApiResponse<T>>
 
 async function apiDelete<T>(path: string): Promise<ApiResponse<T>> {
   try {
-    const res = await fetch(`${API_BASE}${path}`, { method: "DELETE" });
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: "DELETE",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT),
+    });
     if (!res.ok) {
       return { ok: false, data: null, error: `HTTP ${res.status}: ${res.statusText}` };
     }
@@ -191,53 +199,53 @@ async function apiDelete<T>(path: string): Promise<ApiResponse<T>> {
 export async function runBacktest(
   config: BacktestConfig
 ): Promise<ApiResponse<BacktestResult>> {
-  return apiPost<BacktestResult>("/backtesting/run", config);
+  return apiPost<BacktestResult>("/api/v1/backtesting/run", config);
 }
 
 export async function listBacktestRuns(
   limit: number = 50
 ): Promise<ApiResponse<RunSummary[]>> {
-  return apiGet<RunSummary[]>(`/backtesting/runs?limit=${limit}`);
+  return apiGet<RunSummary[]>(`/api/v1/backtesting/runs?limit=${limit}`);
 }
 
 export async function getBacktestRun(
   runId: string
 ): Promise<ApiResponse<BacktestResult>> {
-  return apiGet<BacktestResult>(`/backtesting/runs/${runId}`);
+  return apiGet<BacktestResult>(`/api/v1/backtesting/runs/${runId}`);
 }
 
 export async function getBacktestTrades(
   runId: string
 ): Promise<ApiResponse<unknown[]>> {
-  return apiGet<unknown[]>(`/backtesting/runs/${runId}/trades`);
+  return apiGet<unknown[]>(`/api/v1/backtesting/runs/${runId}/trades`);
 }
 
 export async function getBacktestAnalytics(
   runId: string
 ): Promise<ApiResponse<PerformanceMetrics>> {
-  return apiGet<PerformanceMetrics>(`/backtesting/runs/${runId}/analytics`);
+  return apiGet<PerformanceMetrics>(`/api/v1/backtesting/runs/${runId}/analytics`);
 }
 
 export async function deleteBacktestRun(
   runId: string
 ): Promise<ApiResponse<{ status: string; run_id: string }>> {
-  return apiDelete<{ status: string; run_id: string }>(`/backtesting/runs/${runId}`);
+  return apiDelete<{ status: string; run_id: string }>(`/api/v1/backtesting/runs/${runId}`);
 }
 
 export async function fetchBacktestHealth(): Promise<
   ApiResponse<BacktestHealthResponse>
 > {
-  return apiGet<BacktestHealthResponse>("/backtesting/health");
+  return apiGet<BacktestHealthResponse>("/api/v1/backtesting/health");
 }
 
 export async function startPaperTrading(): Promise<
   ApiResponse<{ session_id: string; status: string; balance: number }>
 > {
-  return apiPost("/backtesting/paper-trading/start");
+  return apiPost("/api/v1/backtesting/paper-trading/start");
 }
 
 export async function stopPaperTrading(
   sessionId: string
 ): Promise<ApiResponse<{ session_id: string; status: string }>> {
-  return apiPost(`/backtesting/paper-trading/${sessionId}/stop`);
+  return apiPost(`/api/v1/backtesting/paper-trading/${sessionId}/stop`);
 }
