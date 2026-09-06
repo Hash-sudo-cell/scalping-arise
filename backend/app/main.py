@@ -69,7 +69,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as e:
             logger.warning("Failed to check decision engine config: %s", e)
 
+    # Restore persisted state
+    if settings.environment != Environment.TESTING:
+        try:
+            from app.modules.state_store import get_state_store
+            store = get_state_store()
+            restored = store.restore()
+            if restored:
+                logger.info("State restored from disk: %s", restored)
+            else:
+                logger.info("No persisted state found — starting fresh")
+        except Exception as e:
+            logger.warning("Failed to restore state: %s", e)
+
     yield
+
+    # Save persisted state on shutdown
+    if settings.environment != Environment.TESTING:
+        try:
+            from app.modules.state_store import get_state_store
+            store = get_state_store()
+            store.save()
+            logger.info("State saved to disk on shutdown")
+        except Exception as e:
+            logger.warning("Failed to save state on shutdown: %s", e)
 
     # Shutdown live streaming
     if _market_data_service is not None:

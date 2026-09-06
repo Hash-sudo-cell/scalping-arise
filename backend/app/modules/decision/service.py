@@ -82,6 +82,11 @@ from app.modules.market_data.service import MarketDataService
 logger = logging.getLogger(__name__)
 
 
+def _serialize_decision(d: FinalDecision) -> dict:
+    """Serialize a FinalDecision to a JSON-safe dict."""
+    return d.model_dump(mode="json")
+
+
 class DecisionEngineService:
     """
     Central decision engine orchestration service.
@@ -120,6 +125,40 @@ class DecisionEngineService:
         self._active: deque[FinalDecision] = deque(
             maxlen=self._settings.active_decisions_max_size,
         )
+
+        # Restore persisted state
+        self._restore_state()
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def _restore_state(self) -> None:
+        """Restore decision state from the state store."""
+        try:
+            from app.modules.state_store import get_state_store
+            store = get_state_store()
+            if not store._restored:
+                store.restore()
+
+            # Restore emergency state
+            self._emergency._disabled = store.emergency_disabled
+            self._emergency._toggle_count = store.emergency_toggle_count
+        except Exception as e:
+            logger.debug("Could not restore decision state: %s", e)
+
+    def _persist_state(self) -> None:
+        """Persist decision state to the state store."""
+        try:
+            from app.modules.state_store import get_state_store
+            store = get_state_store()
+            store.decision_history = [_serialize_decision(d) for d in self._history]
+            store.decision_active = [_serialize_decision(d) for d in self._active]
+            store.emergency_disabled = self._emergency.is_disabled
+            store.emergency_toggle_count = self._emergency._toggle_count
+            store.monitoring_counters = self._monitoring._counters.model_dump(mode="json")
+        except Exception as e:
+            logger.debug("Could not persist decision state: %s", e)
 
     # ------------------------------------------------------------------
     # Public API
@@ -383,6 +422,9 @@ class DecisionEngineService:
         self._history.append(decision)
         if not self._is_terminal(decision.state):
             self._active.append(decision)
+
+        # Persist state to disk
+        self._persist_state()
 
         # Store in idempotency cache
         self._idempotency.store(idem_key, decision.decision_id)
